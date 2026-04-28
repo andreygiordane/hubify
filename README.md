@@ -3,7 +3,7 @@
 </h1>
 
 <p align="center">
-  <strong>Plataforma de comunicação em tempo real inspirada no Zulip</strong><br/>
+  <strong>Plataforma de comunicação em tempo real com organização por Streams e Tópicos</strong><br/>
   Organizada por <em>Streams</em> e <em>Tópicos</em>, com mensagens via WebSocket.
 </p>
 
@@ -21,7 +21,7 @@
 
 ## 📖 Sobre o Projeto
 
-**Hubify** é uma aplicação de mensagens em tempo real com arquitetura full-stack moderna. A comunicação é estruturada em **Streams** (canais temáticos) e **Tópicos** (threads dentro de cada stream), permitindo conversas organizadas e contextualizadas — similar ao Zulip.
+**Hubify** é uma aplicação de mensagens em tempo real com arquitetura full-stack moderna. A comunicação é estruturada em **Streams** (canais temáticos) e **Tópicos** (threads dentro de cada stream), permitindo conversas organizadas e contextualizadas de forma clara e eficiente.
 
 ### ✨ Funcionalidades
 

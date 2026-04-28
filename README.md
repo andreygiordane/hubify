@@ -1,3 +1,5 @@
+<img width="1536" height="1024" alt="Hubify" src="https://github.com/user-attachments/assets/0de53a81-747b-44de-acc9-ba69011ac2bd" />
+
 <h1 align="center">
   <img src="https://img.shields.io/badge/Hubify-Real--Time%20Messaging-6C63FF?style=for-the-badge&logo=rocketchat&logoColor=white" alt="Hubify"/>
 </h1>

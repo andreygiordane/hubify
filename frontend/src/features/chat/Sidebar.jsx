@@ -30,11 +30,8 @@ const Sidebar = ({ streams, activeStream, setActiveStream, activeTopic, setActiv
   const handleCreateStream = async (e) => {
     if (e.key === 'Enter' && newStreamName.trim()) {
       try {
-        const response = await api.post('/streams', { name: newStreamName.trim() });
-        // Assume parent component will re-fetch streams or we just update local state
-        // For simplicity, doing a full page reload or calling a prop fetchStreams would be better.
-        // Let's just reload for now to keep it simple, or update state if passed down.
-        window.location.reload(); 
+        await api.post('/streams', { name: newStreamName.trim() });
+        window.location.reload();
       } catch (error) {
         console.error('Error creating stream', error);
       }
@@ -56,110 +53,118 @@ const Sidebar = ({ streams, activeStream, setActiveStream, activeTopic, setActiv
   };
 
   return (
-    <div className="sidebar" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', margin: 0 }}>Hubify</h2>
+    <div className="sidebar">
+      {/* Logo */}
+      <div className="sidebar-logo">
+        <div className="sidebar-logo-icon">H</div>
+        <span className="sidebar-logo-text">Hubify</span>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <h4 style={{ textTransform: 'uppercase', fontSize: '0.75rem', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>Streams</h4>
-          <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setShowNewStreamInput(!showNewStreamInput)}>+</button>
+      {/* Scrollable content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0 1rem' }}>
+
+        {/* Streams Section */}
+        <div className="sidebar-section">
+          <div className="sidebar-section-header">
+            <span className="sidebar-section-title">Streams</span>
+            <button
+              className="sidebar-add-btn"
+              onClick={() => setShowNewStreamInput(!showNewStreamInput)}
+              title="Novo Stream"
+            >
+              +
+            </button>
+          </div>
+
+          {showNewStreamInput && (
+            <input
+              type="text"
+              className="input-base"
+              placeholder="Nome do stream..."
+              value={newStreamName}
+              onChange={(e) => setNewStreamName(e.target.value)}
+              onKeyDown={handleCreateStream}
+              style={{ marginBottom: '0.5rem', fontSize: '0.82rem', padding: '0.4rem 0.75rem' }}
+              autoFocus
+            />
+          )}
+
+          <ul className="sidebar-nav" style={{ marginBottom: '0.5rem' }}>
+            {streams.map((stream) => (
+              <li key={stream.id}>
+                <button
+                  className={`sidebar-nav-item${activeStream?.id === stream.id ? ' active' : ''}`}
+                  onClick={() => { setActiveStream(stream); setActiveTopic(null); }}
+                >
+                  <span className="nav-item-hash">#</span>
+                  {stream.name}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
-        
-        {showNewStreamInput && (
-          <input 
-            type="text" 
-            className="input-base" 
-            placeholder="New stream..." 
-            value={newStreamName}
-            onChange={(e) => setNewStreamName(e.target.value)}
-            onKeyDown={handleCreateStream}
-            style={{ marginBottom: '1rem', padding: '0.4rem', fontSize: '0.85rem' }}
-            autoFocus
-          />
-        )}
 
-        <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 2rem 0' }}>
-          {streams.map((stream) => (
-            <li key={stream.id}>
-              <button 
-                onClick={() => { setActiveStream(stream); setActiveTopic(null); }}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '0.5rem 0.5rem',
-                  background: activeStream?.id === stream.id ? 'var(--bg-tertiary)' : 'transparent',
-                  border: 'none',
-                  color: activeStream?.id === stream.id ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  borderRadius: '6px',
-                  fontWeight: activeStream?.id === stream.id ? '500' : 'normal',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-              >
-                <span style={{ color: 'var(--accent-color)' }}>#</span> {stream.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-
+        {/* Topics Section */}
         {activeStream && (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <h4 style={{ textTransform: 'uppercase', fontSize: '0.75rem', color: 'var(--text-secondary)', letterSpacing: '0.05em' }}>Topics in {activeStream.name}</h4>
-              <button style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }} onClick={() => setShowNewTopicInput(!showNewTopicInput)}>+</button>
+          <div className="sidebar-section" style={{ marginTop: '0.5rem' }}>
+            <div className="sidebar-section-header">
+              <span className="sidebar-section-title">Tópicos</span>
+              <button
+                className="sidebar-add-btn"
+                onClick={() => setShowNewTopicInput(!showNewTopicInput)}
+                title="Novo Tópico"
+              >
+                +
+              </button>
             </div>
 
             {showNewTopicInput && (
-              <input 
-                type="text" 
-                className="input-base" 
-                placeholder="New topic..." 
+              <input
+                type="text"
+                className="input-base"
+                placeholder="Nome do tópico..."
                 value={newTopicName}
                 onChange={(e) => setNewTopicName(e.target.value)}
                 onKeyDown={handleCreateTopic}
-                style={{ marginBottom: '1rem', padding: '0.4rem', fontSize: '0.85rem' }}
+                style={{ marginBottom: '0.5rem', fontSize: '0.82rem', padding: '0.4rem 0.75rem' }}
                 autoFocus
               />
             )}
 
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+            <ul className="sidebar-nav">
               {topics.map((topic) => (
                 <li key={topic.id}>
-                  <button 
+                  <button
+                    className={`sidebar-nav-item topic-item${activeTopic?.id === topic.id ? ' active' : ''}`}
                     onClick={() => setActiveTopic(topic)}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '0.4rem 0.5rem 0.4rem 2rem',
-                      background: activeTopic?.id === topic.id ? 'rgba(92, 111, 255, 0.1)' : 'transparent',
-                      border: 'none',
-                      color: activeTopic?.id === topic.id ? 'var(--accent-color)' : 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      borderRadius: '6px',
-                      fontSize: '0.9rem'
-                    }}
                   >
+                    <span className="nav-item-icon">💬</span>
                     {topic.name}
                   </button>
                 </li>
               ))}
             </ul>
-          </>
+          </div>
         )}
       </div>
 
-      <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--accent-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
-          {user?.username.charAt(0).toUpperCase()}
+      {/* Footer */}
+      <div className="sidebar-footer">
+        <div className="sidebar-avatar">
+          {user?.username?.charAt(0).toUpperCase() ?? 'U'}
+          <div className="sidebar-avatar-status" />
         </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <div style={{ fontWeight: 500, fontSize: '0.9rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{user?.username}</div>
-          <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '0.8rem', cursor: 'pointer', padding: 0 }}>Logout</button>
+        <div className="sidebar-user-info">
+          <div className="sidebar-username">{user?.username ?? 'Usuário'}</div>
+          <div className="sidebar-status">Online</div>
         </div>
+        <button
+          className="sidebar-settings-btn"
+          onClick={logout}
+          title="Sair"
+        >
+          ⚙️
+        </button>
       </div>
     </div>
   );

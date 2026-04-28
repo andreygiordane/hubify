@@ -5,46 +5,74 @@ import { useNavigate, Link } from 'react-router-dom';
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
+  const { login }               = useAuth();
+  const navigate                = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       await login(username, password);
       navigate('/');
-    } catch (err) {
-      setError('Invalid username or password');
+    } catch {
+      setError('Usuário ou senha inválidos.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="auth-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', width: '100vw' }}>
-      <div className="glass-panel" style={{ padding: '2.5rem', borderRadius: '16px', width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.8rem', fontWeight: 600 }}>Welcome Back</h2>
-        {error && <div style={{ color: 'var(--danger-color)', marginBottom: '1rem', padding: '0.5rem', background: 'rgba(240, 82, 82, 0.1)', borderRadius: '4px' }}>{error}</div>}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="auth-page">
+      <div className="auth-card animate-fade-in">
+        {/* Logo */}
+        <div className="auth-logo">
+          <div className="auth-logo-icon">H</div>
+          <span className="auth-logo-text">Hubify</span>
+        </div>
+
+        <h2 className="auth-title">Bem-vindo de volta</h2>
+        <p className="auth-subtitle">Entre na sua conta para continuar</p>
+
+        {error && <div className="auth-error">{error}</div>}
+
+        <form className="auth-form" onSubmit={handleSubmit}>
           <input
+            id="login-username"
             className="input-base"
             type="text"
-            placeholder="Username"
+            placeholder="Usuário"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             required
+            autoComplete="username"
           />
           <input
+            id="login-password"
             className="input-base"
             type="password"
-            placeholder="Password"
+            placeholder="Senha"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
-          <button className="btn-primary" type="submit" style={{ marginTop: '0.5rem' }}>Login</button>
+          <button
+            id="login-submit"
+            className="btn-primary"
+            type="submit"
+            style={{ marginTop: '0.25rem', width: '100%' }}
+            disabled={loading}
+          >
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
         </form>
-        <p style={{ marginTop: '1.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Don't have an account? <Link to="/register" style={{ color: 'var(--accent-color)', textDecoration: 'none' }}>Register</Link>
+
+        <p className="auth-link">
+          Não tem uma conta?{' '}
+          <Link to="/register">Cadastre-se</Link>
         </p>
       </div>
     </div>

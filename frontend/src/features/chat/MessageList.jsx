@@ -1,6 +1,17 @@
 import React, { useRef, useEffect } from 'react';
 
-const MessageList = ({ messages, currentUser }) => {
+/* Gera uma cor de avatar determinística baseada no nome */
+const avatarColors = [
+  'linear-gradient(135deg,#5b4ff5,#a78bfa)',
+  'linear-gradient(135deg,#0ea5e9,#38bdf8)',
+  'linear-gradient(135deg,#10b981,#34d399)',
+  'linear-gradient(135deg,#f59e0b,#fbbf24)',
+  'linear-gradient(135deg,#ec4899,#f472b6)',
+  'linear-gradient(135deg,#ef4444,#f87171)',
+];
+const getAvatarColor = (name = '') => avatarColors[name.charCodeAt(0) % avatarColors.length];
+
+const MessageList = ({ messages, currentUser, activeTopic }) => {
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -8,65 +19,72 @@ const MessageList = ({ messages, currentUser }) => {
   }, [messages]);
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      {messages.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem' }}>
-          No messages in this topic yet. Start the conversation!
+    <>
+      {/* Topic Card */}
+      {activeTopic && (
+        <div className="topic-card animate-fade-in">
+          <div className="topic-card-icon">💬</div>
+          <div className="topic-card-info">
+            <div className="topic-card-name">Tópico: {activeTopic.name}</div>
+            <div className="topic-card-desc">Discussão sobre {activeTopic.name.toLowerCase()}</div>
+          </div>
+          <button className="topic-card-menu" title="Opções">⋮</button>
         </div>
-      ) : (
-        messages.map((msg, index) => {
-          const isOwn = msg.sender.id === currentUser.id;
-          return (
-            <div key={msg.id || index} style={{ 
-              display: 'flex', 
-              flexDirection: isOwn ? 'row-reverse' : 'row',
-              gap: '1rem',
-              alignItems: 'flex-start'
-            }}>
-              <div style={{ 
-                width: '36px', 
-                height: '36px', 
-                borderRadius: '8px', 
-                backgroundColor: isOwn ? 'var(--accent-color)' : 'var(--bg-tertiary)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                fontWeight: 'bold',
-                flexShrink: 0
-              }}>
-                {msg.sender.username.charAt(0).toUpperCase()}
-              </div>
-              <div style={{ maxWidth: '70%' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'baseline', 
-                  gap: '0.5rem', 
-                  flexDirection: isOwn ? 'row-reverse' : 'row',
-                  marginBottom: '0.25rem'
-                }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{msg.sender.username}</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Now'}
-                  </span>
-                </div>
-                <div style={{ 
-                  padding: '0.75rem 1rem', 
-                  borderRadius: '12px', 
-                  backgroundColor: isOwn ? 'var(--accent-color)' : 'var(--bg-tertiary)',
-                  color: isOwn ? 'white' : 'var(--text-primary)',
-                  borderTopRightRadius: isOwn ? '2px' : '12px',
-                  borderTopLeftRadius: !isOwn ? '2px' : '12px',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  {msg.content}
-                </div>
-              </div>
-            </div>
-          );
-        })
       )}
-      <div ref={endRef} />
-    </div>
+
+      {/* Messages */}
+      <div className="message-list">
+        {messages.length === 0 ? (
+          <div className="message-empty">
+            <div className="message-empty-icon">💬</div>
+            <span>Nenhuma mensagem ainda. Inicie a conversa!</span>
+          </div>
+        ) : (
+          messages.map((msg, index) => {
+            const senderName = msg.sender?.username ?? 'Usuário';
+            const initial   = senderName.charAt(0).toUpperCase();
+            const timeLabel = msg.createdAt
+              ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : 'agora';
+
+            return (
+              <div key={msg.id ?? index} className="message-group">
+                {/* Avatar */}
+                <div
+                  className="msg-avatar"
+                  style={{ background: getAvatarColor(senderName) }}
+                >
+                  {initial}
+                </div>
+
+                <div className="msg-body">
+                  {/* Sender + Time */}
+                  <div className="msg-meta">
+                    <span className="msg-sender">{senderName}</span>
+                    <span className="msg-time">{timeLabel}</span>
+                  </div>
+
+                  {/* Text */}
+                  <div className="msg-text">{msg.content}</div>
+
+                  {/* Simulated attachment for PDF messages */}
+                  {msg.content?.toLowerCase().includes('.pdf') && (
+                    <div className="msg-attachment">
+                      <div className="msg-attachment-icon">📄</div>
+                      <div>
+                        <div className="msg-attachment-name">{msg.content.trim()}</div>
+                        <div className="msg-attachment-size">Arquivo PDF</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+        <div ref={endRef} />
+      </div>
+    </>
   );
 };
 

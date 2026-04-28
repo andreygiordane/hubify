@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: hubify
+      POSTGRES_USER: hubifyuser
+      POSTGRES_PASSWORD: hubifypassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - hubify_data:/var/lib/postgresql/data
+
+volumes:
+  hubify_data:

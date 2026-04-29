@@ -1,0 +1,53 @@
+services:
+  # ── Backend (Spring Boot) ─────────────────────
+  - type: web
+    name: hubify-backend
+    runtime: maven
+    rootDirectory: backend
+    buildCommand: ./mvnw clean install -DskipTests
+    startCommand: java -jar target/*.jar
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hubify-db
+          property: connectionString
+      - key: DB_USERNAME
+        fromDatabase:
+          name: hubify-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: hubify-db
+          property: password
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SPRING_JPA_HIBERNATE_DDL_AUTO
+        value: update
+    # Note: Using the free tier for the database means it will expire in 90 days.
+
+  # ── Frontend (React) ──────────────────────────
+  - type: static
+    name: hubify-frontend
+    runtime: node
+    rootDirectory: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: hubify-backend
+          property: url
+        path: /api
+      - key: VITE_WS_URL
+        fromService:
+          type: web
+          name: hubify-backend
+          property: url
+        path: /ws
+
+databases:
+  - name: hubify-db
+    databaseName: hubify
+    user: hubifyuser
+    plan: free

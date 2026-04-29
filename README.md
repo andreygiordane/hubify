@@ -5,8 +5,8 @@
 </h1>
 
 <p align="center">
-  <strong>Plataforma de comunicação em tempo real com organização por Streams e Tópicos</strong><br/>
-  Organizada por <em>Streams</em> e <em>Tópicos</em>, com mensagens via WebSocket.
+  <strong>Plataforma de colaboração e comunicação em tempo real de alta fidelidade</strong><br/>
+  Com chamadas de voz/vídeo, compartilhamento de arquivos, presença dinâmica e organização por Streams.
 </p>
 
 <p align="center">
@@ -27,12 +27,15 @@
 
 ### ✨ Funcionalidades
 
-- 🔐 **Autenticação segura** com JWT (registro e login de usuários)
-- 💬 **Mensagens em tempo real** via WebSocket (protocolo STOMP sobre SockJS)
-- 📂 **Streams e Tópicos** para organização de conversas
-- 👤 **Gerenciamento de sessão** com contexto de autenticação no frontend
-- 🛡️ **Spring Security** configurado para proteção das rotas da API
-- 🗄️ **Persistência** de mensagens, usuários, streams e tópicos no PostgreSQL
+- 🔐 **Autenticação de Alta Fidelidade:** Telas de Login e Registro com design moderno e seguro (JWT).
+- 💬 **Mensagens em Tempo Real:** Chat fluido via WebSocket com suporte a emojis e anexos.
+- 📞 **Chamadas de Voz e Vídeo:** Sistema integrado de conferência em tempo real.
+- 👥 **Streams e Grupos:** Organização por canais temáticos e conversas privadas.
+- 📂 **Gestão de Documentos:** Envio de arquivos com miniatura e pré-visualização instantânea (PDFs, Imagens).
+- 🟢 **Presença Dinâmica:** Status em tempo real (Online, Ocupado, Ausente, Offline) com cores dinâmicas.
+- ✏️ **Edição e Exclusão:** Controle total sobre suas mensagens com histórico de edição.
+- 🛡️ **Gerenciamento de Grupo:** Convites, remoção de membros e controle de proprietário.
+- 🏢 **Interface Glassmorphism:** Design premium, moderno e responsivo com temas escuros.
 
 ---
 
@@ -42,20 +45,19 @@
 hubify/
 ├── backend/          # API REST + WebSocket (Java Spring Boot)
 │   └── src/main/java/com/hubify/backend/
-│       ├── config/         # Configurações de segurança e WebSocket
-│       ├── controllers/    # AuthController, MessageController, StreamController, TopicController
-│       ├── models/         # Entidades JPA: User, Message, Stream, Topic
+│       ├── config/         # Segurança, WebSocket e Storage
+│       ├── controllers/    # Auth, Message, Stream, Call, Upload, User
+│       ├── models/         # Entidades: User, Message, Stream, Conversation, Invite
 │       ├── payload/        # DTOs de request/response
-│       ├── repositories/   # Interfaces Spring Data JPA
-│       ├── security/       # JWT filter, UserDetailsService
-│       └── services/       # Lógica de negócio
+│       ├── repositories/   # Spring Data JPA (PostgreSQL)
+│       └── security/       # JWT e Proteção de Rotas
 ├── frontend/         # SPA React com Vite
 │   └── src/
 │       ├── pages/          # Login, Register, ChatInterface
-│       ├── features/chat/  # Sidebar, MessageList, MessageInput
-│       ├── contexts/       # AuthContext (gerenciamento de sessão)
-│       └── services/       # Cliente HTTP Axios configurado
-└── docker-compose.yml  # Banco de dados PostgreSQL em container
+│       ├── features/chat/  # Sidebar, MessageList, CallMenu, MeetingRoom, FilePreview
+│       ├── contexts/       # AuthContext (sessão e estado global)
+│       └── services/       # Integração com API (Axios)
+└── docker-compose.yml  # PostgreSQL e ambiente de dados
 ```
 
 ---
@@ -148,13 +150,15 @@ npm run dev
 
 | Método | Rota | Descrição | Auth |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Cadastrar novo usuário | ❌ |
-| `POST` | `/api/auth/login` | Autenticar e obter JWT | ❌ |
-| `GET` | `/api/streams` | Listar todos os streams | ✅ |
-| `GET` | `/api/topics?streamId={id}` | Listar tópicos de um stream | ✅ |
-| `GET` | `/api/messages?streamId={id}&topicId={id}` | Listar mensagens | ✅ |
-| `POST` | `/api/messages` | Enviar nova mensagem | ✅ |
-| `WS` | `/ws` | Endpoint WebSocket (STOMP) | ✅ |
+| `POST` | `/api/auth/login` | Login e geração de Token | ❌ |
+| `POST` | `/api/auth/register` | Cadastro de novo usuário | ❌ |
+| `GET` | `/api/users/profile` | Dados do perfil logado | ✅ |
+| `GET` | `/api/streams` | Listar canais do usuário | ✅ |
+| `POST` | `/api/messages` | Enviar mensagem / arquivo | ✅ |
+| `GET` | `/api/conversations` | Listar chats privados | ✅ |
+| `POST` | `/api/upload` | Upload de arquivos temporários | ✅ |
+| `PUT` | `/api/users/status` | Atualizar status de presença | ✅ |
+| `WS` | `/ws` | Conexão WebSocket (STOMP) | ✅ |
 
 ---
 

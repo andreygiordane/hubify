@@ -7,5 +7,8 @@ public class MessageRequest {
     private String content;
     private Long senderId;
     private Long streamId;
-    private Long topicId;
+    private Long conversationId;
+    private String attachmentUrl;
+    private String attachmentName;
+    private String attachmentType;
 }

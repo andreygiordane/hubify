@@ -22,13 +22,22 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String username;
 
+    @Column(nullable = false)
+    private String displayName;
+
     @Column(unique = true, nullable = false)
     private String email;
 
     @Column(nullable = false)
     private String password;
 
+    @Column(columnDefinition = "TEXT")
     private String avatarUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private PresenceStatus status = PresenceStatus.OFFLINE;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

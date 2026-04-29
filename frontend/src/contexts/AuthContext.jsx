@@ -24,17 +24,31 @@ export const AuthProvider = ({ children }) => {
     return response.data;
   };
 
-  const register = async (username, email, password) => {
-    return await api.post('/auth/register', { username, email, password });
+  const updateUser = (nextUser) => {
+    setUser((currentUser) => {
+      const resolvedUser = typeof nextUser === 'function' ? nextUser(currentUser) : { ...currentUser, ...nextUser };
+      localStorage.setItem('user', JSON.stringify(resolvedUser));
+      return resolvedUser;
+    });
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
-    setUser(null);
+  const register = async (username, email, password, displayName) => {
+    return await api.post('/auth/register', { username, displayName, email, password });
+  };
+
+  const logout = async () => {
+    try {
+      await api.put('/users/me/status', { status: 'OFFLINE' });
+    } catch (error) {
+      console.error('Error marking user offline', error);
+    } finally {
+      localStorage.removeItem('user');
+      setUser(null);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

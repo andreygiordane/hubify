@@ -8,9 +8,9 @@ spring:
       max-request-size: 20MB
 
   datasource:
-    url: jdbc:postgresql://localhost:5433/hubify
-    username: hubifyuser
-    password: hubifypassword
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/hubify}
+    username: ${DB_USERNAME:hubifyuser}
+    password: ${DB_PASSWORD:hubifypassword}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -29,5 +29,5 @@ hubify:
   upload-dir: uploads
 
 jwt:
-  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   expiration: 86400000 # 1 day in ms

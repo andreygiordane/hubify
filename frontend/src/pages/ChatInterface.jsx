@@ -319,7 +319,8 @@ const ChatInterface = () => {
     };
     fetchInvites();
 
-    const socket = new SockJS('http://localhost:8080/ws');
+    const wsBaseUrl = import.meta.env.VITE_WS_URL || 'http://localhost:8080/ws';
+    const socket = new SockJS(wsBaseUrl);
     const client = new Client({
       webSocketFactory: () => socket,
       onConnect: () => {

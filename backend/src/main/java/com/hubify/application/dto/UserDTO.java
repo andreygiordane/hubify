@@ -14,4 +14,5 @@ public class UserDTO {
     private String status;
     private String bio;
     private String activeDMs;
+    private boolean mustChangePassword;
 }

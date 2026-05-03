@@ -38,6 +38,7 @@ export default function Chat() {
   const scrollContainerRef = useRef(null);
   const menuRef = useRef(null);
   const fileInputRef = useRef(null);
+  const inputBarRef = useRef(null);
   const attachmentMenuRef = useRef(null);
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
@@ -95,6 +96,36 @@ export default function Chat() {
     const currDate = new Date(currentMessages[index].timestamp).toDateString();
     return prevDate !== currDate;
   };
+
+  useEffect(() => {
+    // Adjust input bar position when virtual keyboard appears (mobile)
+    const el = inputBarRef.current;
+    if (!el) return;
+
+    const applyOffset = () => {
+      try {
+        const vv = window.visualViewport;
+        if (vv) {
+          const keyboardHeight = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
+          // limit excessive offset
+          const offset = Math.min(keyboardHeight, Math.round(window.innerHeight * 0.6));
+          el.style.bottom = `${offset}px`;
+        } else {
+          el.style.bottom = '';
+        }
+      } catch (e) { el.style.bottom = ''; }
+    };
+
+    applyOffset();
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', applyOffset);
+    window.addEventListener('orientationchange', applyOffset);
+
+    return () => {
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', applyOffset);
+      window.removeEventListener('orientationchange', applyOffset);
+      if (el) el.style.bottom = '';
+    };
+  }, [inputBarRef]);
 
   useEffect(() => {
     if (isAtBottom) {
@@ -561,7 +592,7 @@ export default function Chat() {
           </div>
 
           {/* Input */}
-          <div className="p-4 md:p-6 bg-white border-t border-slate-100 relative">
+          <div ref={inputBarRef} className="fixed md:relative left-0 right-0 bottom-0 z-40 p-4 md:p-6 bg-white border-t border-slate-100" style={{backdropFilter: 'blur(6px)'}}>
             {isForwardMode && (
               <div className="absolute inset-x-0 bottom-full bg-indigo-600 text-white px-6 py-4 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300 z-[80]">
                 <div className="flex items-center gap-4">

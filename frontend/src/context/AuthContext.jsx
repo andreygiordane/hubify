@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
     // Marcar como offline ao fechar a aba/navegador
     const handleUnload = () => {
       if (user?.id) {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8081/api';
+        const API_URL = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app';
         const url = `${API_URL}/auth/users/${user.id}`;
         const data = JSON.stringify({ status: 'offline', isOnline: false });
         

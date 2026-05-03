@@ -696,9 +696,9 @@ export const ChatProvider = ({ children }) => {
   const handleUpdateProfile = async (data) => {
     try {
       await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, data, { merge: true });
-      setShowEditProfileModal(false);
     } catch (error) {
       console.error("Erro ao atualizar perfil:", error);
+      throw error;
     }
   };
 

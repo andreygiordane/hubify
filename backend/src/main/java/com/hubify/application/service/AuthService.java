@@ -4,6 +4,8 @@ import com.hubify.application.dto.UserDTO;
 import com.hubify.domain.model.User;
 import com.hubify.infrastructure.persistence.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,10 +15,16 @@ import java.util.stream.Collectors;
 @Service
 public class AuthService {
 
+    private static final int MIN_PASSWORD_LENGTH = 8;
+
     @Autowired
     private UserRepository userRepository;
 
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
     public UserDTO register(User user) {
+        validatePassword(user.getPassword());
+
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
             throw new RuntimeException("Email já cadastrado.");
         }
@@ -25,6 +33,7 @@ public class AuthService {
         }
         user.setRole("Membro da Equipe");
         user.setOnline(true);
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
         if (user.getAvatarUrl() == null || user.getAvatarUrl().isEmpty()) {
             user.setAvatarUrl("https://api.dicebear.com/7.x/avataaars/svg?seed=" + user.getUsername());
         }
@@ -32,15 +41,54 @@ public class AuthService {
         return convertToDTO(savedUser);
     }
 
-    public Optional<UserDTO> login(String username, String password) {
-        Optional<User> optUser = userRepository.findByUsername(username);
-        if (optUser.isPresent() && optUser.get().getPassword().equals(password)) {
-            User user = optUser.get();
-            user.setOnline(true);
-            userRepository.save(user);
-            return Optional.of(convertToDTO(user));
+    public Optional<UserDTO> login(String identifier, String password) {
+        if (identifier == null || password == null) {
+            return Optional.empty();
         }
-        return Optional.empty();
+
+        String trimmedIdentifier = identifier.trim();
+        Optional<User> optUser = trimmedIdentifier.contains("@")
+                ? userRepository.findByEmail(trimmedIdentifier)
+                : userRepository.findByUsername(trimmedIdentifier);
+
+        if (optUser.isEmpty()) {
+            optUser = userRepository.findByUsername(trimmedIdentifier);
+            if (optUser.isEmpty()) {
+                optUser = userRepository.findByEmail(trimmedIdentifier);
+            }
+        }
+
+        if (optUser.isEmpty()) {
+            return Optional.empty();
+        }
+
+        User user = optUser.get();
+        if (!matchesPassword(password, user.getPassword())) {
+            return Optional.empty();
+        }
+
+        UserDTO dto = convertToDTO(user);
+        
+        // Verifica se a senha atual (raw) atende aos NOVOS requisitos
+        if (!isValidPattern(password)) {
+            dto.setMustChangePassword(true);
+        }
+
+        // Se for senha antiga (não hashada), hashear agora, mas manter a flag se for fraca
+        if (!isHashedPassword(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(password));
+        }
+
+        user.setOnline(true);
+        userRepository.save(user);
+        return Optional.of(dto);
+    }
+
+    private boolean isValidPattern(String password) {
+        return password != null && password.length() >= MIN_PASSWORD_LENGTH
+                && password.matches(".*[0-9].*")
+                && password.matches(".*[!@#$%^&*].*")
+                && password.matches(".*[A-Z].*");
     }
 
     public List<UserDTO> getAllUsers() {
@@ -54,7 +102,36 @@ public class AuthService {
     }
 
     public User save(User user) {
+        if (user.getPassword() != null && !user.getPassword().isBlank() && !isHashedPassword(user.getPassword())) {
+            validatePassword(user.getPassword());
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
+        }
         return userRepository.save(user);
+    }
+
+    public boolean matchesPassword(String rawPassword, String storedPassword) {
+        if (rawPassword == null || storedPassword == null) {
+            return false;
+        }
+
+        if (isHashedPassword(storedPassword)) {
+            return passwordEncoder.matches(rawPassword, storedPassword);
+        }
+
+        return storedPassword.equals(rawPassword);
+    }
+
+    private void validatePassword(String password) {
+        if (password == null || password.length() < MIN_PASSWORD_LENGTH
+                || !password.matches(".*[0-9].*")
+                || !password.matches(".*[!@#$%^&*].*")
+                || !password.matches(".*[A-Z].*")) {
+            throw new RuntimeException("A senha precisa ter no mínimo 8 caracteres, um número, uma letra maiúscula e um caractere especial.");
+        }
+    }
+
+    private boolean isHashedPassword(String password) {
+        return password != null && password.startsWith("$2");
     }
 
     public UserDTO convertToDTO(User user) {
@@ -69,6 +146,7 @@ public class AuthService {
         dto.setStatus(user.getStatus());
         dto.setBio(user.getBio());
         dto.setActiveDMs(user.getActiveDMs());
+        // mustChangePassword não é persistido no User, é calculado no login ou setado manualmente
         return dto;
     }
 }

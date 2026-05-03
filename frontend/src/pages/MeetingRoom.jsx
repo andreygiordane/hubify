@@ -7,11 +7,9 @@ import { io } from 'socket.io-client';
 
 const getSocketUrl = () => {
   const envUrl = import.meta.env.VITE_SOCKET_URL;
-  if (envUrl && !envUrl.includes('localhost')) return envUrl;
+  if (envUrl) return envUrl;
   
-  // Se for localhost ou não definido, tenta inferir do host atual
-  const { protocol, hostname } = window.location;
-  return `${protocol}//${hostname}:8080`;
+  return 'https://hubify-video-server-358184322842.us-central1.run.app';
 };
 
 const SOCKET_URL = getSocketUrl();

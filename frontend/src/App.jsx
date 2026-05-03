@@ -10,11 +10,21 @@ import Calendar from './pages/Calendar';
 import Contacts from './pages/Contacts';
 import Invitations from './pages/Invitations';
 import MeetingRoom from './pages/MeetingRoom';
+import SettingsProfile from './pages/SettingsProfile';
 import Modals from './components/modals/Modals';
 
 export default function App() {
   const { user, login } = useAuth();
   const { view, setView } = useChat();
+
+  React.useEffect(() => {
+    // Try locking orientation to portrait where supported (secure contexts / installed PWA)
+    try {
+      if (screen && screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('portrait').catch(() => {});
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
 
   if (!user) {
     return <Auth onLogin={login} />;
@@ -31,6 +41,7 @@ export default function App() {
       {view === 'calendar' && <Calendar />}
       {view === 'contacts' && <Contacts />}
       {view === 'invitations' && <Invitations />}
+      {view === 'settings' && <SettingsProfile />}
       <Modals />
     </MainLayout>
   );

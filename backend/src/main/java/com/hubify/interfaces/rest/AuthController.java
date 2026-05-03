@@ -41,7 +41,12 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody User loginRequest) {
-        Optional<UserDTO> optUser = authService.login(loginRequest.getUsername(), loginRequest.getPassword());
+        String identifier = loginRequest.getUsername();
+        if (identifier == null || identifier.isBlank()) {
+            identifier = loginRequest.getEmail();
+        }
+
+        Optional<UserDTO> optUser = authService.login(identifier, loginRequest.getPassword());
         if (optUser.isPresent()) {
             return ResponseEntity.ok(optUser.get());
         }

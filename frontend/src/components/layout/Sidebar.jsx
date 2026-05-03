@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { 
-  MessageSquare, Video, Calendar, Users, Settings, LogOut, 
+  MessageSquare, Video, Calendar, Users, LogOut, 
   User as UserIcon, ChevronDown, UserPlus 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -9,7 +9,7 @@ import { useChat } from '../../context/ChatContext';
 
 export default function Sidebar() {
   const { user, currentUserProfile, userStatus, setUserStatus, logout } = useAuth();
-  const { view, setView, activeRoomId, groups, showProfileMenu, setShowProfileMenu, setShowEditProfileModal, setShowSecurityModal, statusConfig, groupInvites, selectedChatMobile } = useChat();
+  const { view, setView, activeRoomId, groups, showProfileMenu, setShowProfileMenu, statusConfig, groupInvites, selectedChatMobile } = useChat();
 
   const pendingInvitesCount = groupInvites.filter(i => i.toId === user?.id).length;
 
@@ -76,8 +76,7 @@ export default function Sidebar() {
                 userStatus={userStatus} 
                 setUserStatus={setUserStatus} 
                 setShowProfileMenu={setShowProfileMenu} 
-                setShowEditProfileModal={setShowEditProfileModal}
-                setShowSecurityModal={setShowSecurityModal}
+                setView={setView}
                 logout={logout}
                 statusConfig={statusConfig}
                 isMobile={false}
@@ -136,8 +135,7 @@ export default function Sidebar() {
               userStatus={userStatus} 
               setUserStatus={setUserStatus} 
               setShowProfileMenu={setShowProfileMenu} 
-              setShowEditProfileModal={setShowEditProfileModal}
-              setShowSecurityModal={setShowSecurityModal}
+              setView={setView}
               logout={logout}
               statusConfig={statusConfig}
               isMobile={true}
@@ -149,7 +147,7 @@ export default function Sidebar() {
   );
 }
 
-function ProfileDropdown({ userStatus, setUserStatus, setShowProfileMenu, setShowEditProfileModal, setShowSecurityModal, logout, statusConfig, isMobile }) {
+function ProfileDropdown({ userStatus, setUserStatus, setShowProfileMenu, setView, logout, statusConfig, isMobile }) {
   return (
     <div className={`absolute ${isMobile ? 'bottom-full right-0 mb-4 w-56' : 'bottom-full left-0 w-full mb-4'} bg-[#1e293b] border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden z-[110] animate-in fade-in slide-in-from-bottom-2 duration-200 backdrop-blur-xl`}>
        <div className="p-3">
@@ -183,22 +181,12 @@ function ProfileDropdown({ userStatus, setUserStatus, setShowProfileMenu, setSho
 
           <button 
             onClick={() => {
-              setShowEditProfileModal(true);
+              setView('settings');
               setShowProfileMenu(false);
             }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-300 hover:bg-slate-700/50 transition-all mb-1"
           >
-            <UserIcon className="w-4 h-4 text-slate-400" /> Editar Perfil
-          </button>
-
-          <button 
-            onClick={() => {
-              setShowSecurityModal(true);
-              setShowProfileMenu(false);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-300 hover:bg-slate-700/50 transition-all mb-1"
-          >
-            <Settings className="w-4 h-4 text-slate-400" /> Segurança
+            <UserIcon className="w-4 h-4 text-slate-400" /> Perfil e Segurança
           </button>
           
           <div className="h-px bg-slate-700/50 mx-2 my-2"></div>

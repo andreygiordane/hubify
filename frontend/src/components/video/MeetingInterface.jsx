@@ -485,9 +485,11 @@ function BottomControls({
          <button onClick={shareScreen} className={`p-3 flex-shrink-0 rounded-full transition-colors ${screenSharing ? 'bg-[#25d366] text-[#0a0d14]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><MonitorUp size={20}/></button>
        )}
        
-       <button onClick={toggleHand} className={`p-3 flex-shrink-0 rounded-full transition-colors ${isHandRaised ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><Hand size={20}/></button>
-       
-       {!isMobileView && (
+       {!isVoiceMode && (
+         <button onClick={toggleHand} className={`p-3 flex-shrink-0 rounded-full transition-colors ${isHandRaised ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><Hand size={20}/></button>
+       )}
+
+       {!isVoiceMode && (
          <button onClick={toggleInvite} className="p-3 flex-shrink-0 rounded-full bg-[#3c404b] hover:bg-gray-500 text-white transition-colors"><UserPlus size={20}/></button>
        )}
 

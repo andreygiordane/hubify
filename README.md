@@ -1,75 +1,96 @@
-# Hubify - Corporate Collaboration Platform v3.0
+# Hubify - Plataforma de Colaboração Corporativa v3.2.0
 
-Hubify is a high-performance, real-time corporate communication and collaboration platform. Built with a focus on professional productivity, it integrates secure messaging, group coordination, and high-fidelity video meetings into a single, unified ecosystem.
+![Hubify Logo](https://api.dicebear.com/7.x/initials/svg?seed=Hubify&backgroundColor=4f46e5&fontFamily=Open%20Sans&fontWeight=700)
 
-## 🚀 Version 3.0 Highlights
-
-This version represents a major leap in communication flexibility and professional tooling:
-
-### 💬 Advanced Messaging Suite
-- **Interactive Message Management**: Unified "three-dots" menu for intuitive message control.
-- **Smart Editing**: Fix typos or update information within a 5-minute window after sending.
-- **Contextual Replies**: Threaded-style replies with quoted message previews and "jump-to" navigation.
-- **Content Forwarding**: Multi-select and share messages across different conversations (DMs and Groups) with origin tagging.
-- **Cloud Clipboard**: Instant "Copy to Clipboard" for fast text sharing.
-- **Reliable Deletion**: Real-time synchronization for message removal across all participants.
-
-### 📞 Real-time Signaling & Calls
-- **Robust Call Synchronization**: Cancellations are now synchronized instantly; canceling a call as the caller immediately clears the interface for all recipients.
-- **Dynamic Dialing Screen**: New visual feedback for both 1:1 and group calls with stylized initials-based avatars.
-- **Mute Preferences**: Integrated "Silent Mode" that strictly respects room-specific notification preferences.
-
-### 👥 Collaboration & UI
-- **Group Management**: Membership hierarchy (Admin/Member) with invite/remove capabilities.
-- **Real-time Status**: Live connection indicators (Online/Offline) across the entire platform.
-- **Professional Aesthetics**: Premium dark-mode themed interface with glassmorphism effects and modern typography.
+Hubify é um ecossistema de comunicação profissional de alta performance, projetado para unificar mensagens em tempo real, videoconferências em HD e gestão de equipes em uma interface premium e intuitiva.
 
 ---
 
-## 🛠 Tech Stack
+## 🚀 Novidades da Versão 3.2.0
 
-- **Frontend**: React.js, Tailwind CSS, Lucide Icons, Vite.
-- **Backend**: Java (Spring Boot), PostgreSQL.
-- **Real-time Engine**: Firestore / Realtime Database logic for instant signaling.
-- **Video Services**: WebRTC with a dedicated Node.js signaling server.
-- **Infrastructure**: Docker & Docker Compose for containerized deployment.
+Esta versão foca em segurança avançada, flexibilidade de acesso e uma experiência mobile totalmente revitalizada.
+
+### 🔐 Segurança e Autenticação Evoluída
+- **Login Híbrido**: Autenticação flexível permitindo o uso de **E-mail** ou **Nome de Usuário** (@usuario).
+- **Migração de Senhas Legadas**: Sistema inteligente que detecta senhas antigas/fracas no login e exige a atualização imediata para o novo padrão de segurança.
+- **Padrão de Senha Forte**: Implementação de requisitos rigorosos (8+ caracteres, números, símbolos e letras maiúsculas) com validação visual em tempo real.
+- **Criptografia BCrypt**: Todas as senhas são processadas com hashing de última geração antes da persistência.
+
+### 📱 Experiência Mobile Premium
+- **Interface Redesenhada**: Tela de login mobile com estética sincronizada à versão web (glassmorphism, gradientes neon e texturas profundas).
+- **Identidade Visual**: Integração do logotipo oficial da Hubify e mensagens de saudação dinâmicas baseadas no contexto do usuário.
+- **Responsividade Total**: Layout adaptativo garantindo usabilidade perfeita em qualquer tamanho de tela.
+
+### 💬 Mensageria e Colaboração (Recursos Core)
+- **Ciclo de Vida de Mensagens**: Editar, Responder, Encaminhar e Apagar mensagens com sincronização instantânea via Socket.io.
+- **Gestão de Grupos**: Sistema de hierarquia para administradores e convites de membros em tempo real.
+- **Status Online**: Indicadores de presença em toda a plataforma.
 
 ---
 
-## 📦 Getting Started
+## 🛠 Tecnologias Utilizadas
 
-### Prerequisites
-- Docker & Docker Compose
-- Node.js (for local development)
-- Java 17 (for local backend development)
+### Frontend
+- **React 18**: Biblioteca base para UI reativa.
+- **Vite**: Build tool ultrarrápido para desenvolvimento moderno.
+- **Tailwind CSS**: Estilização baseada em utilitários para design consistente.
+- **Lucide Icons**: Conjunto de ícones premium e leves.
+- **Framer Motion**: Animações suaves e micro-interações.
+- **Socket.io-client**: Comunicação bidirecional em tempo real.
 
-### Running with Docker (Recommended)
-1. Clone the repository:
+### Backend
+- **Java 25**: Linguagem robusta com as últimas funcionalidades de performance.
+- **Spring Boot 3**: Framework para APIs REST seguras e escaláveis.
+- **Spring Data JPA**: Abstração de persistência eficiente.
+- **PostgreSQL**: Banco de dados relacional robusto para dados críticos.
+- **Lombok**: Redução de boilerplate code para maior manutenibilidade.
+
+### Infraestrutura & Vídeo
+- **WebRTC**: Tecnologia para transmissão de vídeo e áudio P2P.
+- **Node.js**: Servidor de sinalização (Signaling) para conexões WebRTC.
+- **Docker & Docker Compose**: Conteinerização de todos os serviços para deploy simplificado em qualquer ambiente.
+
+---
+
+## 📂 Estrutura do Projeto
+
+```bash
+├── backend/            # API Spring Boot (Java 25)
+│   ├── src/main/java   # Lógica de negócio, Controllers e Segurança
+│   └── pom.xml         # Dependências Maven e Versão 3.2.0
+├── frontend/           # Aplicação React (Vite)
+│   ├── src/            # Componentes, Páginas e Contextos
+│   └── package.json    # Dependências e Versão 3.2.0
+├── video-server/       # Servidor de Sinalização (Node.js)
+│   ├── server.js       # Lógica de handshaking WebRTC
+│   └── package.json    # Dependências e Versão 3.2.0
+└── docker-compose.yml  # Orquestração do ecossistema Hubify
+```
+
+---
+
+## 📦 Como Executar
+
+### Pré-requisitos
+- Docker & Docker Compose instalados.
+
+### Passo a Passo
+1. Clone este repositório:
    ```bash
    git clone git@github.com:andreygiordane/hubify.git
    ```
-2. Build and start the containers:
+2. Inicie o ecossistema completo:
    ```bash
-   docker-compose up --build -d
+   docker-compose up -d --build
    ```
-3. Access the application at `http://localhost:3000`.
+3. Acesse a plataforma em `http://localhost:5173`.
 
 ---
 
-## 📂 Architecture Overview
-
-- `/frontend`: React application containing the UI and state management.
-- `/backend`: Spring Boot REST API for user management, groups, and persistence.
-- `/video-server`: Node.js signaling server for WebRTC handshakes.
-- `docker-compose.yml`: Orchestration for Database, Backend, Frontend, and Video services.
-
----
-
-## 👤 Author
+## 👤 Autor
 **Andrey Giordane**
 Email: [andreycostaa@gmail.com](mailto:andreycostaa@gmail.com)
 GitHub: [@andreygiordane](https://github.com/andreygiordane)
 
 ---
-
-Developed with ❤️ for Hubify v3.0
+Desenvolvido com foco em excelência e produtividade corporativa. Hubify v3.2.0.

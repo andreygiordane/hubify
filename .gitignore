@@ -1,0 +1,22 @@
+# Node
+**/node_modules/
+**/dist/
+.env*
+!.env.production
+
+# Java
+**/target/
+*.class
+.mvn/
+.settings/
+.classpath
+.project
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.DS_Store
+
+# Docker
+.docker/

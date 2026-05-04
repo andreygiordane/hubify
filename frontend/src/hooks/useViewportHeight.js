@@ -1,37 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 
-export function useViewportHeight() {
-  const [viewportHeight, setViewportHeight] = useState('100%');
-
+export const useViewportHeight = () => {
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const handleResize = () => {
-      if (window.visualViewport) {
-        setViewportHeight(`${window.visualViewport.height}px`);
-      } else {
-        setViewportHeight('100vh');
-      }
+    const setVH = () => {
+      let vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
     };
 
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-      window.visualViewport.addEventListener('scroll', handleResize);
-    } else {
-      window.addEventListener('resize', handleResize);
-    }
-    
-    handleResize();
+    setVH();
+    window.addEventListener('resize', setVH);
+    window.addEventListener('orientationchange', setVH);
 
     return () => {
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-        window.visualViewport.removeEventListener('scroll', handleResize);
-      } else {
-        window.removeEventListener('resize', handleResize);
-      }
+      window.removeEventListener('resize', setVH);
+      window.removeEventListener('orientationchange', setVH);
     };
   }, []);
-
-  return viewportHeight;
-}
+};

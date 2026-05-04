@@ -447,16 +447,18 @@ const ContactDetailModal = ({ contact, onClose, onStartChat }) => {
                 Iniciar Conversa
               </button>
               
-              <div className="grid grid-cols-2 gap-3">
-                <button className="py-3 bg-slate-50 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-100">
-                  <Phone className="w-4 h-4" />
-                  Voz
-                </button>
-                <button className="py-3 bg-slate-50 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-100">
-                  <Video className="w-4 h-4" />
-                  Vídeo
-                </button>
-              </div>
+              {contact.id !== user.id && (
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { handleStartAudioCall(`dm_${[user.id, contact.id].sort().join('_')}`); onClose(); }} className="py-3 bg-slate-50 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-100">
+                    <Phone className="w-4 h-4" />
+                    Voz
+                  </button>
+                  <button onClick={() => { handleStartMeeting(`dm_${[user.id, contact.id].sort().join('_')}`); onClose(); }} className="py-3 bg-slate-50 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2 border border-slate-100">
+                    <Video className="w-4 h-4" />
+                    Vídeo
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

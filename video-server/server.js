@@ -29,9 +29,23 @@ const cleanupRoom = (roomId) => {
 io.on('connection', (socket) => {
   console.log(`[+] User connected: ${socket.id} | Active connections: ${io.engine.clientsCount}`);
 
-  socket.on('join-room', ({ roomId, uid, name, avatarUrl }) => {
+  socket.on('join-room', async ({ roomId, uid, name, avatarUrl }) => {
     try {
       socket.join(roomId);
+      socket.userId = uid; // Store for disconnect logic
+      
+      // Marcar como online no backend
+      try {
+        const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:8081/api';
+        await fetch(`${BACKEND_URL}/auth/users/${uid}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isOnline: true })
+        });
+      } catch (e) {
+        console.error(`[STATUS] Error marking online for ${uid}:`, e.message);
+      }
+
       if (!rooms[roomId]) rooms[roomId] = new Map();
       
       // Envia a lista de sockets existentes para o novo usuário (para a classe Peer)
@@ -103,8 +117,33 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('call-ended');
   });
 
-  socket.on('disconnect', () => {
+  socket.on('typing', ({ roomId, userId, userName }) => {
+    socket.to(roomId).emit('user-typing', { userId, userName });
+  });
+
+  socket.on('stop-typing', ({ roomId, userId }) => {
+    socket.to(roomId).emit('user-stop-typing', { userId });
+  });
+
+  socket.on('disconnect', async () => {
     console.log(`[-] User disconnected: ${socket.id} | Active connections: ${io.engine.clientsCount - 1}`);
+    const userId = socket.userId; // Precisamos armazenar o userId no socket ao conectar
+    
+    if (userId) {
+      // Notificar o backend que o usuário ficou offline, mas preservar o status de texto
+      try {
+        const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:8081/api';
+        await fetch(`${BACKEND_URL}/auth/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ isOnline: false })
+        });
+        console.log(`[STATUS] User ${userId} marked as OFFLINE (presence only)`);
+      } catch (e) {
+        console.error(`[STATUS] Error updating offline status for ${userId}:`, e.message);
+      }
+    }
+
     for (const roomId in rooms) {
       if (rooms[roomId].has(socket.id)) {
         rooms[roomId].delete(socket.id);

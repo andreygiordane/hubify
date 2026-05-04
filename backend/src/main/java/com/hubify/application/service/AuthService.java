@@ -146,6 +146,7 @@ public class AuthService {
         dto.setStatus(user.getStatus());
         dto.setBio(user.getBio());
         dto.setActiveDMs(user.getActiveDMs());
+        dto.setReadTimestamps(user.getReadTimestamps());
         // mustChangePassword não é persistido no User, é calculado no login ou setado manualmente
         return dto;
     }

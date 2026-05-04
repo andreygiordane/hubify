@@ -31,4 +31,7 @@ public class User {
     private String bio;
     @Column(columnDefinition = "TEXT")
     private String activeDMs; // JSON array como string: ["user1", "user2"]
+    
+    @Column(columnDefinition = "TEXT")
+    private String readTimestamps; // JSON map como string: {"roomId": 123456789}
 }

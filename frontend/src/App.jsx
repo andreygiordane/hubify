@@ -12,8 +12,10 @@ import Invitations from './pages/Invitations';
 import MeetingRoom from './pages/MeetingRoom';
 import SettingsProfile from './pages/SettingsProfile';
 import Modals from './components/modals/Modals';
+import { useViewportHeight } from './hooks/useViewportHeight';
 
 export default function App() {
+  useViewportHeight();
   const { user, login } = useAuth();
   const { view, setView } = useChat();
 

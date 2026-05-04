@@ -10,7 +10,8 @@ import {
   Users as UsersIcon,
   X,
   ChevronLeft,
-  BellOff
+  BellOff,
+  Edit
 } from 'lucide-react';
 
 export default function ChatList({ 
@@ -43,7 +44,7 @@ export default function ChatList({
   );
 
   const totalUnreadCount = chatRooms.reduce((acc, room) => {
-    return acc + allMessages.filter(m => m.roomId === room.id && m.senderId !== user.id && m.timestamp > (readTimestamps[room.id] || 0)).length;
+    return acc + allMessages.filter(m => m.roomId === room.id && m.senderId !== user?.id && m.timestamp > (readTimestamps[room.id] || 0)).length;
   }, 0);
 
   return (
@@ -52,11 +53,6 @@ export default function ChatList({
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Conversas</h2>
-            {totalUnreadCount > 0 && (
-              <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
-                {totalUnreadCount}
-              </span>
-            )}
           </div>
           <div className="relative">
             <button 
@@ -140,7 +136,7 @@ export default function ChatList({
         ) : (
           filteredRooms.map((room) => {
             const lastMsg = allMessages.filter(m => m.roomId === room.id).slice(-1)[0];
-            const unreadCount = allMessages.filter(m => m.roomId === room.id && m.senderId !== user.id && m.timestamp > (readTimestamps[room.id] || 0)).length;
+            const unreadCount = allMessages.filter(m => m.roomId === room.id && m.senderId !== user?.id && m.timestamp > (readTimestamps[room.id] || 0)).length;
             const isActive = activeRoomId === room.id;
 
             return (
@@ -189,8 +185,9 @@ export default function ChatList({
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <p className={`text-xs truncate ${isActive ? 'text-indigo-600 font-medium' : unreadCount > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
-                      {lastMsg ? (lastMsg.senderId === user.id ? 'Você: ' : '') + lastMsg.text : 'Sem mensagens'}
+                    <p className={`text-xs truncate flex items-center gap-1 ${isActive ? 'text-indigo-600 font-medium' : unreadCount > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+                      {lastMsg ? (lastMsg.senderId === user?.id ? 'Você: ' : '') + lastMsg.text : 'Sem mensagens'}
+                      {lastMsg?.isEdited && <Edit size={10} className="shrink-0 opacity-60" />}
                     </p>
                     {unreadCount > 0 && (
                       <span className="bg-indigo-600 text-white text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5 shadow-lg shadow-indigo-100 animate-in zoom-in duration-300">

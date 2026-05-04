@@ -467,7 +467,7 @@ function BottomControls({
   toggleChat, togglePeople, isMobileView, isVoiceMode, toggleInvite
 }) {
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 sm:gap-3 bg-[#11141c] border border-[#1e232e] px-4 py-3 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.6)] w-max max-w-[95%] overflow-x-auto no-scrollbar">
+    <div className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1.5 sm:gap-3 bg-[#11141c]/90 backdrop-blur-xl border border-[#1e232e] px-3 sm:px-4 py-2 sm:py-3 rounded-2xl sm:rounded-full shadow-2xl w-max max-w-[98%] overflow-x-auto no-scrollbar">
        <button onClick={toggleMic} className={`p-3 rounded-full flex-shrink-0 transition-colors ${isMicOn ? 'bg-[#3c404b] text-white hover:bg-gray-500' : 'bg-red-500/20 text-red-500'}`}>{isMicOn ? <Mic size={20}/> : <MicOff size={20}/>}</button>
        
        {!isVoiceMode && (
@@ -495,7 +495,7 @@ function BottomControls({
 
        <div className="w-px h-8 bg-gray-700 mx-1 flex-shrink-0"></div>
        
-       <button onClick={onLeave} className="p-3 flex-shrink-0 bg-[#ea4335] hover:bg-red-700 text-white rounded-full transition-all shadow-[0_4px_14px_rgba(234,67,53,0.4)]"><PhoneOff size={20}/></button>
+       <button onClick={onLeave} className="p-2.5 sm:p-3 flex-shrink-0 bg-[#ea4335] hover:bg-red-700 text-white rounded-full transition-all shadow-[0_4px_14px_rgba(234,67,53,0.4)]"><PhoneOff size={20}/></button>
     </div>
   );
 }
@@ -656,10 +656,27 @@ export default function MeetingInterface({
         });
         
         socket.on('room-participants', updated => setRoomParticipants(updated));
-        socket.on('receive-chat', msg => setMessages(prev => [...prev, { sender: msg.sender, text: msg.text, time: new Date().toLocaleTimeString(), isSelf: false }]));
+        socket.on('receive-chat', msg => {
+          const isSelf = msg.sender === currentUser.name;
+          setMessages(prev => [...prev, { 
+            sender: msg.sender, 
+            text: msg.text, 
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+            isSelf 
+          }]);
+        });
         socket.on('call-ended', () => {
           console.log("Chamada encerrada pelo outro participante.");
           onLeave();
+        });
+
+        socket.on('user-joined-room', payload => {
+          setMessages(prev => [...prev, { 
+            sender: 'Sistema', 
+            text: `${payload.name} entrou na sala.`, 
+            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
+            isSelf: false 
+          }]);
         });
 
         socket.on("all-users", users => {
@@ -781,7 +798,8 @@ export default function MeetingInterface({
   const handleSendMessage = (text) => {
     const msg = { sender: currentUser.name, text };
     socket.emit('send-chat', { roomId, message: msg });
-    setMessages(prev => [...prev, { ...msg, time: new Date().toLocaleTimeString(), isSelf: true }]);
+    // We don't add to local state here to avoid duplicates, 
+    // the server will broadcast it back to us via 'receive-chat'
   };
 
   const handleExit = () => {
@@ -797,7 +815,7 @@ export default function MeetingInterface({
 
   if (isVoiceMode) {
     return (
-      <div className="h-screen w-full bg-[#11141c] flex flex-col relative">
+      <div className="h-dynamic-screen w-full bg-[#0a0d14] flex flex-col relative overflow-hidden">
         {allParticipants.filter(p => !p.isLocal).map(p => (
            <audio key={p.id} autoPlay playsInline ref={el => { if (el && p.stream && el.srcObject !== p.stream) el.srcObject = p.stream }} />
         ))}
@@ -823,7 +841,7 @@ export default function MeetingInterface({
   }
 
   return (
-    <div className="h-screen w-full bg-[#0a0d14] text-white flex flex-col font-sans overflow-hidden relative">
+    <div className="h-dynamic-screen w-full bg-[#0a0d14] text-white flex flex-col font-sans overflow-hidden relative">
       <header className="px-8 py-5 flex justify-between items-center z-40">
         <div className="flex items-center gap-4"><span className="text-sm font-medium text-gray-300">{formatTime(time)}</span><Signal size={14} className="text-indigo-500" /></div>
         <div className="flex items-center gap-2 absolute left-1/2 -translate-x-1/2">

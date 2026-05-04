@@ -9,7 +9,7 @@ const getSocketUrl = () => {
   const envUrl = import.meta.env.VITE_SOCKET_URL;
   if (envUrl) return envUrl;
   
-  return 'https://hubify-video-server-358184322842.us-central1.run.app';
+  return 'http://localhost:8080';
 };
 
 const SOCKET_URL = getSocketUrl();

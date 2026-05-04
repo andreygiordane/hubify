@@ -5,6 +5,9 @@ import {
   fetchCollection, patchDocument, saveDocument, removeDocument, createDocument
 } from '../api-client';
 import { useAuth } from './AuthContext';
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
 
 const ChatContext = createContext();
 
@@ -20,16 +23,32 @@ export const ChatProvider = ({ children }) => {
   const [callType, setCallType] = useState('video');
   const [mediaSettings, setMediaSettings] = useState({ video: true, audio: true });
   const [allMessages, setAllMessages] = useState([]);
+
+  const handleUpdateProfile = async (data) => {
+    try {
+      await saveDocument(`artifacts/hubify/public/data/users/${user.id}`, data, { merge: true });
+    } catch (error) {
+      console.error("Erro ao atualizar perfil:", error);
+      throw error;
+    }
+  };
+
   const [groups, setGroups] = useState([]);
   const [users, setUsers] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [activeDMs, setActiveDMs] = useState([]);
-  const [readTimestamps, setReadTimestamps] = useState(() => {
-    try {
-      const saved = localStorage.getItem('hubify_read_timestamps');
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) { return {}; }
-  });
+  const [typingUsers, setTypingUsers] = useState({}); // { roomId: { userId: userName } }
+  const socketRef = useRef(null);
+  const [readTimestamps, setReadTimestamps] = useState({});
+  useEffect(() => {
+    if (currentUserProfile?.readTimestamps) {
+      try {
+        setReadTimestamps(JSON.parse(currentUserProfile.readTimestamps));
+      } catch (e) {
+        setReadTimestamps({});
+      }
+    }
+  }, [currentUserProfile]);
   const [mutedRooms, setMutedRooms] = useState(() => {
     try {
       const saved = localStorage.getItem('hubify_muted_rooms');
@@ -207,6 +226,8 @@ export const ChatProvider = ({ children }) => {
       setActiveRoomId(rId);
       setView('room');
       setUserStatus('reuniao');
+      // For groups, we don't show the dialer to the initiator
+      setIsOutgoingCall(false); 
     }
   };
 
@@ -272,6 +293,7 @@ export const ChatProvider = ({ children }) => {
       setActiveRoomId(rId);
       setView('room');
       setUserStatus('reuniao');
+      setIsOutgoingCall(false);
     }
   };
 
@@ -293,18 +315,69 @@ export const ChatProvider = ({ children }) => {
     setShowSuccessModal(true);
   };
 
+  const handleSendMessage = async (text, attachment = null, replyToId = null) => {
+    if (!activeRoomId || !user) return;
+    const msgId = `msg_${Date.now()}_${user.id}_${Math.random().toString(36).substr(2, 5)}`;
+    const now = Date.now();
+    const newMsg = {
+      id: msgId,
+      roomId: activeRoomId,
+      senderId: user.id,
+      senderName: currentUserProfile?.name || user.username,
+      text,
+      attachment,
+      replyToId,
+      timestamp: now,
+      isOptimistic: true
+    };
+
+    // Atualização otimista: adiciona à lista local imediatamente
+    setAllMessages(prev => [...prev, newMsg]);
+
+    try {
+      await createDocument(`artifacts/${appId}/public/data/messages`, newMsg);
+      // O listener do Firebase/API cuidará de remover a flag isOptimistic ao receber a mensagem oficial
+    } catch (error) {
+      console.error("Erro ao enviar mensagem:", error);
+      // Remover a mensagem otimista em caso de falha crítica
+      setAllMessages(prev => prev.filter(m => m.id !== msgId));
+    }
+  };
+
+  const handleForwardMessages = async (messageIds, targetRoomIds) => {
+    for (const roomId of targetRoomIds) {
+      for (const msgId of messageIds) {
+        const originalMsg = allMessages.find(m => m.id === msgId);
+        if (!originalMsg) continue;
+
+        const newId = `msg_fwd_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        await createDocument(`artifacts/${appId}/public/data/messages`, {
+          id: newId,
+          roomId: roomId,
+          senderId: user.id,
+          senderName: currentUserProfile?.name || user.username,
+          text: originalMsg.text,
+          attachment: originalMsg.attachment,
+          timestamp: Date.now(),
+          isForwarded: true
+        });
+      }
+    }
+  };
+
   useEffect(() => {
-    if (activeRoomId) {
+    if (activeRoomId && user?.id) {
       localStorage.setItem('hubify_active_room_id', activeRoomId);
+      const now = Date.now();
       setReadTimestamps(prev => {
-        const next = { ...prev, [activeRoomId]: Date.now() };
-        localStorage.setItem('hubify_read_timestamps', JSON.stringify(next));
+        const next = { ...prev, [activeRoomId]: now };
+        handleUpdateProfile({ readTimestamps: JSON.stringify(next) }).catch(() => {});
         return next;
       });
     } else {
       localStorage.removeItem('hubify_active_room_id');
     }
-  }, [activeRoomId]);
+  }, [activeRoomId, user?.id]);
 
   // Sistema de Notificações de Reunião (10m, 5m, 0m e Host Entrou)
   useEffect(() => {
@@ -356,6 +429,60 @@ export const ChatProvider = ({ children }) => {
     return () => clearInterval(timer);
   }, [user, meetings]);
 
+  // Socket Connection
+  useEffect(() => {
+    if (!user) return;
+
+    const socket = io(SOCKET_URL);
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Global Socket Connected');
+      // If there's an active room, join it immediately
+      if (activeRoomIdRef.current) {
+        socket.emit('join-room', { 
+          roomId: activeRoomIdRef.current, 
+          uid: user.id, 
+          name: currentUserProfile?.name || user.username 
+        });
+      }
+    });
+
+    socket.on('user-typing', ({ userId, userName }) => {
+      const roomId = activeRoomIdRef.current;
+      if (!roomId) return;
+      setTypingUsers(prev => ({
+        ...prev,
+        [roomId]: { ...(prev[roomId] || {}), [userId]: userName }
+      }));
+    });
+
+    socket.on('user-stop-typing', ({ userId }) => {
+      const roomId = activeRoomIdRef.current;
+      if (!roomId) return;
+      setTypingUsers(prev => {
+        const roomTyping = { ...(prev[roomId] || {}) };
+        delete roomTyping[userId];
+        return { ...prev, [roomId]: roomTyping };
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user]);
+
+  // Sync socket with active room
+  useEffect(() => {
+    if (socketRef.current && activeRoomId && user) {
+      socketRef.current.emit('join-room', { 
+        roomId: activeRoomId, 
+        uid: user.id, 
+        name: currentUserProfile?.name || user.username 
+      });
+    }
+  }, [activeRoomId]);
+
   // Listeners
     useEffect(() => {
     localStorage.setItem('hubify_muted_rooms', JSON.stringify(mutedRooms));
@@ -388,7 +515,26 @@ export const ChatProvider = ({ children }) => {
         }
       }
 
-      setAllMessages(fetchedMsgs);
+      setAllMessages(prev => {
+        // Preservar mensagens otimistas que ainda não voltaram do servidor
+        const optimistic = prev.filter(m => m.isOptimistic && !fetchedMsgs.find(f => f.id === m.id));
+        const merged = [...fetchedMsgs, ...optimistic];
+        merged.sort((a, b) => a.timestamp - b.timestamp);
+        return merged;
+      });
+
+      // NOVO: Se houver sala ativa, atualizar readTimestamps para o momento atual
+      // Isso garante que se novas mensagens chegarem na sala aberta, elas sejam marcadas como lidas
+      if (activeRoomIdRef.current && user?.id) {
+        const now = Date.now();
+        setReadTimestamps(prev => {
+          const next = { ...prev, [activeRoomIdRef.current]: now };
+          // Apenas atualizar no banco se houver mudança significativa (debounce opcional aqui, mas vamos direto)
+          handleUpdateProfile({ readTimestamps: JSON.stringify(next) }).catch(() => {});
+          return next;
+        });
+      }
+
       lastMessagesCount.current = fetchedMsgs.length;
       isFirstLoadMessages.current = false;
     });
@@ -517,38 +663,9 @@ export const ChatProvider = ({ children }) => {
     setIncomingCall(null);
   };
 
-  const handleSendMessage = async (text, attachment = null, replyToId = null) => {
-    if (!text && !attachment) return;
-    await createDocument(`artifacts/${appId}/public/data/messages`, {
-      roomId: activeRoomId,
-      text,
-      senderId: user.id,
-      senderName: currentUserProfile?.name || 'Usuário',
-      senderAvatar: currentUserProfile?.avatarUrl || '',
-      attachment,
-      timestamp: Date.now(),
-      replyToId
-    });
-  };
 
-  const handleForwardMessages = async (messageIds, targetRoomIds) => {
-    const messagesToForward = allMessages.filter(m => messageIds.includes(m.id));
-    
-    for (const targetId of targetRoomIds) {
-      for (const msg of messagesToForward) {
-        await createDocument(`artifacts/${appId}/public/data/messages`, {
-          roomId: targetId,
-          senderId: user.id,
-          senderName: currentUserProfile?.name || 'Usuário',
-          senderAvatar: currentUserProfile?.avatarUrl || '',
-          text: msg.text,
-          attachment: msg.attachment,
-          timestamp: Date.now(),
-          isForwarded: true
-        });
-      }
-    }
-  };
+
+
 
   const [processingInvites, setProcessingInvites] = useState(new Set());
 
@@ -673,6 +790,10 @@ export const ChatProvider = ({ children }) => {
       setSelectedChatMobile(false);
     }
     
+    setIsOutgoingCall(false);
+    setOutgoingTarget(null);
+    setIncomingCall(null);
+    setShowMediaSetup(false);
     setView('chat');
     setUserStatus('online');
   };
@@ -684,7 +805,23 @@ export const ChatProvider = ({ children }) => {
   };
 
   const handleEditMessage = async (messageId, newText) => {
-    await patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, { text: newText });
+    const now = Date.now();
+    
+    // Atualização otimista local
+    setAllMessages(prev => prev.map(m => 
+      m.id === messageId ? { ...m, text: newText, isEdited: true, editedAt: now } : m
+    ));
+
+    try {
+      await patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, { 
+        text: newText,
+        isEdited: true,
+        editedAt: now
+      });
+    } catch (error) {
+      console.error("Erro ao editar mensagem:", error);
+      // Reverter em caso de erro (opcional, mas aqui vamos apenas logar)
+    }
   };
 
   const handleDeleteMessage = async (messageId) => {
@@ -693,12 +830,18 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  const handleUpdateProfile = async (data) => {
-    try {
-      await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, data, { merge: true });
-    } catch (error) {
-      console.error("Erro ao atualizar perfil:", error);
-      throw error;
+
+
+  const setTyping = (isTyping) => {
+    if (!socketRef.current || !activeRoomId || !user) return;
+    if (isTyping) {
+      socketRef.current.emit('typing', { 
+        roomId: activeRoomId, 
+        userId: user.id, 
+        userName: currentUserProfile?.name || user.username 
+      });
+    } else {
+      socketRef.current.emit('stop-typing', { roomId: activeRoomId, userId: user.id });
     }
   };
 
@@ -819,7 +962,7 @@ export const ChatProvider = ({ children }) => {
     // Pegar IDs de usuários com quem temos mensagens
     const usersWithMessages = new Set();
     allMessages.forEach(m => {
-      if (m.roomId.startsWith('dm_')) {
+      if (m?.roomId?.startsWith('dm_')) {
         const parts = m.roomId.replace('dm_', '').split('_');
         if (parts.includes(user.id)) {
           const otherId = parts.find(id => id !== user.id);
@@ -902,7 +1045,8 @@ export const ChatProvider = ({ children }) => {
     handleLeaveRoom,
     selectedChatMobile, setSelectedChatMobile,
     meetingNotifications, setMeetingNotifications,
-    mutedRooms, toggleMuteRoom
+    mutedRooms, toggleMuteRoom,
+    typingUsers, setTyping
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

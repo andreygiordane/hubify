@@ -92,6 +92,9 @@ public class AuthController {
             if (updateData.containsKey("password") && updateData.get("password") != null) {
                 user.setPassword(updateData.get("password").toString());
             }
+            if (updateData.containsKey("readTimestamps") && updateData.get("readTimestamps") != null) {
+                user.setReadTimestamps(updateData.get("readTimestamps").toString());
+            }
             
             User savedUser = authService.save(user);
             return ResponseEntity.ok(authService.convertToDTO(savedUser));

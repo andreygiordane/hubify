@@ -1,15 +1,16 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Search, Send, MoreVertical, Trash2, Phone, Video, Info, ChevronLeft, 
   Image as ImageIcon, FileText, Download, Paperclip, Clock, Calendar, X, Plus,
   FileSpreadsheet, Package, FileCode, FileArchive, Bell, BellOff, ShieldCheck,
-  Edit, CornerUpLeft, Copy, Forward, CheckCircle2, Circle
+  Edit, CornerUpLeft, Copy, Forward, CheckCircle2, Circle, Smile, Check
 } from 'lucide-react';
 import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import ChatList from '../components/chat/ChatList';
 import HeaderNotification from '../components/common/HeaderNotification';
+import EmojiPicker from 'emoji-picker-react';
 
 export default function Chat() {
   const { 
@@ -21,8 +22,9 @@ export default function Chat() {
     groupInvites, setView, showChatInfo, setShowChatInfo,
     setPreviewDocument, showAddMemberModal, setShowAddMemberModal,
     setSelectedContactDetail, setShowContactDetailModal,
-    startConversation, handleRemoveMember, mutedRooms, toggleMuteRoom,
-    handleDeleteMessage, handleEditMessage, handleForwardMessages
+    startConversation, handleRemoveMember, handleUpdateProfile, 
+    handleDeleteMessage, handleEditMessage, handleForwardMessages,
+    typingUsers, setTyping, mutedRooms, toggleMuteRoom
   } = useChat();
   const { user } = useAuth();
   
@@ -42,6 +44,7 @@ export default function Chat() {
   const attachmentMenuRef = useRef(null);
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [replyingToMessage, setReplyingToMessage] = useState(null);
   const [isForwardMode, setIsForwardMode] = useState(false);
   const [selectedForwardMessages, setSelectedForwardMessages] = useState([]);
@@ -49,6 +52,24 @@ export default function Chat() {
   const messageMenuRef = useRef(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const typingTimeoutRef = useRef(null);
+  const messageInputRef = useRef(null);
+
+  const recipient = useMemo(() => {
+    if (!activeRoomId?.startsWith('dm_')) return null;
+    const otherId = activeRoomId.replace('dm_', '').split('_').find(id => id !== user?.id);
+    return users.find(u => u.id === otherId);
+  }, [activeRoomId, users, user?.id]);
+
+  const recipientReadTimestamps = useMemo(() => {
+    if (!recipient?.readTimestamps) return {};
+    try {
+      return JSON.parse(recipient.readTimestamps);
+    } catch (e) {
+      return {};
+    }
+  }, [recipient]);
 
   const getFileIcon = (fileName) => {
     const ext = fileName.split('.').pop().toLowerCase();
@@ -97,34 +118,11 @@ export default function Chat() {
     return prevDate !== currDate;
   };
 
+  // Keyboard management is now handled by flexbox and h-dynamic-screen
   useEffect(() => {
-    // Adjust input bar position when virtual keyboard appears (mobile)
     const el = inputBarRef.current;
     if (!el) return;
-
-    const applyOffset = () => {
-      try {
-        const vv = window.visualViewport;
-        if (vv) {
-          const keyboardHeight = Math.max(0, window.innerHeight - vv.height - (vv.offsetTop || 0));
-          // limit excessive offset
-          const offset = Math.min(keyboardHeight, Math.round(window.innerHeight * 0.6));
-          el.style.bottom = `${offset}px`;
-        } else {
-          el.style.bottom = '';
-        }
-      } catch (e) { el.style.bottom = ''; }
-    };
-
-    applyOffset();
-    if (window.visualViewport) window.visualViewport.addEventListener('resize', applyOffset);
-    window.addEventListener('orientationchange', applyOffset);
-
-    return () => {
-      if (window.visualViewport) window.visualViewport.removeEventListener('resize', applyOffset);
-      window.removeEventListener('orientationchange', applyOffset);
-      if (el) el.style.bottom = '';
-    };
+    el.style.bottom = '0';
   }, [inputBarRef]);
 
   useEffect(() => {
@@ -183,6 +181,7 @@ export default function Chat() {
     if (editingMessage) {
       handleEditMessage(editingMessage.id, newMessage);
       setEditingMessage(null);
+      setIsEditing(false);
       setNewMessage('');
     } else {
       handleSendMessage(newMessage, pendingFile, replyingToMessage?.id);
@@ -252,7 +251,7 @@ export default function Chat() {
         {renderChatList()}
       </div>
 
-      <div className={`flex-1 flex flex-col bg-white h-[100dvh] overflow-hidden ${!selectedChatMobile ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex flex-col bg-white h-dynamic-screen overflow-hidden ${!selectedChatMobile ? 'hidden md:flex' : 'flex'}`}>
         <div className="h-16 shrink-0 px-4 md:px-6 border-b border-slate-100 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-40">
           <div className="flex items-center gap-3">
             <button className="md:hidden p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-full transition-all" onClick={() => { setSelectedChatMobile(false); setActiveRoomId(null); }}>
@@ -266,13 +265,47 @@ export default function Chat() {
               )}
             </div>
             <div className="cursor-pointer" onClick={() => setShowChatInfo(true)}>
-              <h2 className="font-bold text-slate-900 leading-tight">{currentRoomInfo.name}</h2>
-              <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">
-                {currentRoomInfo.isGroup 
-                  ? `${currentRoomInfo.members?.length || 0} membros` 
-                  : (statusConfig[currentRoomInfo.status || (currentRoomInfo.isOnline ? 'online' : 'offline')]?.label || 'Online')
-                }
-              </p>
+              <h2 className="text-base font-black text-slate-800 leading-tight truncate max-w-[150px] md:max-w-[300px]">
+                {currentRoomInfo.name}
+              </h2>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const typingInRoom = typingUsers[activeRoomId] || {};
+                  const typingOthers = Object.entries(typingInRoom).filter(([id]) => id !== user?.id);
+                  
+                  if (typingOthers.length > 0) {
+                    return (
+                      <span className="text-[10px] font-black text-indigo-600 animate-pulse flex items-center gap-1">
+                        <div className="w-1 h-1 bg-indigo-600 rounded-full" />
+                        {typingOthers.length === 1 
+                          ? `${typingOthers[0][1]} está digitando...` 
+                          : `${typingOthers.length} pessoas estão digitando...`}
+                      </span>
+                    );
+                  }
+
+                  if (currentRoomInfo.isGroup) {
+                    return (
+                      <>
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {currentRoomInfo.members?.length || 0} Membros
+                        </span>
+                      </>
+                    );
+                  }
+
+                  const isOnline = currentRoomInfo.isOnline;
+                  return (
+                    <>
+                      <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-slate-300'}`} />
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {isOnline ? 'Online agora' : 'Offline'}
+                      </span>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           </div>
 
@@ -302,32 +335,35 @@ export default function Chat() {
               </button>
             )}
 
-            <div className="relative">
-              <button 
-                onClick={() => setShowCallMenu(!showCallMenu)}
-                className={`p-2 rounded-xl transition-all ${showCallMenu ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}
-                title="Chamada"
-              >
-                <Video className="w-5 h-5" />
-              </button>
+            {/* Chamada - Bloqueado se for chat consigo mesmo */}
+            {(!currentRoomInfo.isDM || currentRoomInfo.id !== user.id) && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowCallMenu(!showCallMenu)}
+                  className={`p-2 rounded-xl transition-all ${showCallMenu ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}
+                  title="Chamada"
+                >
+                  <Video className="w-5 h-5" />
+                </button>
 
-              {showCallMenu && (
-                <div className="absolute right-0 top-12 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                  <button 
-                    onClick={() => { handleStartMeeting(); setShowCallMenu(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-4 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                  >
-                    <Video className="w-4 h-4 text-indigo-600" /> Chamada de Vídeo
-                  </button>
-                  <button 
-                    onClick={() => { handleStartAudioCall(); setShowCallMenu(false); }}
-                    className="w-full flex items-center gap-3 px-4 py-4 text-sm text-slate-700 hover:bg-slate-50 transition-colors border-t border-slate-50"
-                  >
-                    <Phone className="w-4 h-4 text-green-600" /> Chamada de Áudio
-                  </button>
-                </div>
-              )}
-            </div>
+                {showCallMenu && (
+                  <div className="absolute right-0 top-12 w-48 bg-white border border-slate-100 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    <button 
+                      onClick={() => { handleStartMeeting(); setShowCallMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-4 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Video className="w-4 h-4 text-indigo-600" /> Chamada de Vídeo
+                    </button>
+                    <button 
+                      onClick={() => { handleStartAudioCall(); setShowCallMenu(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-4 text-sm text-slate-700 hover:bg-slate-50 transition-colors border-t border-slate-50"
+                    >
+                      <Phone className="w-4 h-4 text-green-600" /> Chamada de Áudio
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="relative" ref={menuRef}>
               <button 
@@ -470,6 +506,7 @@ export default function Chat() {
                                     <button 
                                       onClick={() => {
                                         setEditingMessage(msg);
+                                        setIsEditing(true);
                                         setNewMessage(msg.text);
                                         setActiveMessageMenuId(null);
                                       }}
@@ -579,8 +616,38 @@ export default function Chat() {
                           <p className="text-sm leading-relaxed font-medium break-words">{msg.text}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 relative">
+                      <div className={`flex items-center gap-2 relative ${isMine ? 'justify-end' : ''}`}>
+                        {msg.isEdited && (
+                          <span className="text-[8px] font-black text-indigo-400 uppercase tracking-tighter italic flex items-center gap-0.5">
+                            <Edit size={8} /> Editada
+                          </span>
+                        )}
                         <span className="text-[9px] font-bold text-slate-400 uppercase">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        
+                        {isMine && !msg.isOptimistic && (
+                          <div className="flex items-center ml-1">
+                            {(() => {
+                              const isRead = recipientReadTimestamps[activeRoomId] >= msg.timestamp;
+                              if (isRead) {
+                                return (
+                                  <div className="flex">
+                                    <Check size={12} className="text-blue-500" />
+                                    <Check size={12} className="text-blue-500 -ml-2" />
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="flex">
+                                  <Check size={12} className="text-slate-300" />
+                                  <Check size={12} className="text-slate-300 -ml-2" />
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                        {isMine && msg.isOptimistic && (
+                          <Check size={12} className="text-slate-300 ml-1" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -592,7 +659,10 @@ export default function Chat() {
           </div>
 
           {/* Input */}
-          <div ref={inputBarRef} className="fixed md:relative left-0 right-0 bottom-0 z-40 p-4 md:p-6 bg-white border-t border-slate-100" style={{backdropFilter: 'blur(6px)'}}>
+          <div 
+            ref={inputBarRef} 
+            className={`shrink-0 p-4 md:p-6 bg-white border-t border-slate-100 z-40 transition-all duration-500 ease-out ${showEmojiPicker ? 'mb-[50vh] md:mb-0' : 'mb-0'}`}
+          >
             {isForwardMode && (
               <div className="absolute inset-x-0 bottom-full bg-indigo-600 text-white px-6 py-4 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300 z-[80]">
                 <div className="flex items-center gap-4">
@@ -717,12 +787,98 @@ export default function Chat() {
                   </div>
                 )}
               </div>
+              <div className="relative">
+                <button 
+                  type="button"
+                  onClick={() => {
+                  if (!showEmojiPicker) {
+                    // Se vai abrir os emojis, tirar o foco do input para fechar o teclado no mobile
+                    messageInputRef.current?.blur();
+                  }
+                  setShowEmojiPicker(!showEmojiPicker);
+                }}
+                  className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all active:scale-95 shrink-0 border ${
+                    showEmojiPicker 
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
+                      : 'text-slate-400 bg-slate-50 border-slate-100 hover:bg-slate-100 hover:text-indigo-600'
+                  }`}
+                >
+                  <Smile className="w-5 h-5" />
+                </button>
+
+                {showEmojiPicker && (
+                  <div className={`
+                    fixed left-0 right-0 bottom-0 bg-white/80 backdrop-blur-2xl z-[100] border-t border-slate-200/50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-500 ease-out animate-in slide-in-from-bottom-full
+                    md:absolute md:bottom-24 md:left-0 md:right-auto md:w-[380px] md:h-[480px] md:rounded-[2.5rem] md:mb-0 md:border md:shadow-2xl
+                    ${showEmojiPicker ? 'h-[50vh] md:h-[480px]' : 'h-0 overflow-hidden'}
+                  `}>
+                    {/* Header do Picker no Mobile */}
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 md:hidden">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse" />
+                        <span className="font-black text-xs uppercase tracking-widest text-slate-800">Seletor de Emojis</span>
+                      </div>
+                      <button 
+                        onClick={() => setShowEmojiPicker(false)} 
+                        className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all active:scale-90"
+                      >
+                        <X size={18}/>
+                      </button>
+                    </div>
+
+                    <div className="w-full h-[calc(100%-60px)] md:h-full overflow-hidden custom-emoji-picker">
+                      <EmojiPicker 
+                        onEmojiClick={(emojiData) => {
+                          setNewMessage(prev => prev + emojiData.emoji);
+                          // Múltipla seleção: não fecha!
+                        }}
+                        theme="light"
+                        width="100%"
+                        height="100%"
+                        skinTonesDisabled
+                        searchPlaceholder="Buscar..."
+                        previewConfig={{ showPreview: false }}
+                        lazyLoadEmojis={true}
+                        categories={[
+                          { category: 'suggested', name: 'Recentes' },
+                          { category: 'smileys_people', name: 'Carinhas' },
+                          { category: 'animals_nature', name: 'Natureza' },
+                          { category: 'food_drink', name: 'Comida' },
+                          { category: 'activities', name: 'Atividades' },
+                          { category: 'travel_places', name: 'Viagem' },
+                          { category: 'objects', name: 'Objetos' },
+                          { category: 'symbols', name: 'Símbolos' },
+                          { category: 'flags', name: 'Bandeiras' }
+                        ]}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
               
               <input 
+                ref={messageInputRef}
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Digite uma mensagem..."
-                className="flex-1 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 transition-all text-sm"
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  
+                  // Typing Indicator Logic
+                  setTyping(true);
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                  typingTimeoutRef.current = setTimeout(() => {
+                    setTyping(false);
+                  }, 2000);
+                }}
+                onFocus={() => { 
+                  if (showEmojiPicker) setShowEmojiPicker(false); 
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    onSubmit(e);
+                  }
+                }}
+                placeholder={editingMessage ? "Alterar mensagem..." : "Digite algo interessante..."}
+                className="flex-1 bg-slate-50/50 border border-slate-200/60 rounded-2xl px-6 py-4 text-sm focus:bg-white focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-400 outline-none transition-all placeholder:text-slate-400 font-medium"
               />
               <button 
                 type="submit"

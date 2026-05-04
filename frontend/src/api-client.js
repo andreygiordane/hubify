@@ -4,7 +4,7 @@
  * Centralized communication layer for Hubify platform backend.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
 
 // Database core functions
 export const getDatabase = () => ({});
@@ -77,7 +77,7 @@ export const listenToCollection = (path, callback) => {
   };
 
   fetchPath();
-  interval = setInterval(fetchPath, 800);
+  interval = setInterval(fetchPath, 500);
   
   return () => clearInterval(interval);
 };
@@ -109,7 +109,7 @@ export const createDocument = async (path, data) => {
 
 const mergeDocumentData = async (collectionName, docId, data) => {
   try {
-    const response = await fetch(`${API_URL}/data/${collectionName}`);
+    const response = await fetch(`${API_URL}/data/${collectionName}?t=${Date.now()}`);
     if (!response.ok) return { id: docId, ...data };
 
     const docs = await response.json();

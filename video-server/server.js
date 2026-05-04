@@ -125,6 +125,10 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-stop-typing', { userId });
   });
 
+  socket.on('messages-read', ({ roomId, userId, timestamp }) => {
+    socket.to(roomId).emit('user-read-messages', { userId, roomId, timestamp });
+  });
+
   socket.on('disconnect', async () => {
     console.log(`[-] User disconnected: ${socket.id} | Active connections: ${io.engine.clientsCount - 1}`);
     const userId = socket.userId; // Precisamos armazenar o userId no socket ao conectar

@@ -658,11 +658,12 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div 
-            ref={inputBarRef} 
-            className={`shrink-0 p-4 md:p-6 bg-white border-t border-slate-100 z-40 transition-all duration-500 ease-out ${showEmojiPicker ? 'mb-[50vh] md:mb-0' : 'mb-0'}`}
-          >
+          {/* Input Area Container */}
+          <div className="shrink-0 flex flex-col bg-white border-t border-slate-100 z-40">
+            <div 
+              ref={inputBarRef} 
+              className="p-4 md:p-6"
+            >
             {isForwardMode && (
               <div className="absolute inset-x-0 bottom-full bg-indigo-600 text-white px-6 py-4 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300 z-[80]">
                 <div className="flex items-center gap-4">
@@ -787,16 +788,15 @@ export default function Chat() {
                   </div>
                 )}
               </div>
-              <div className="relative">
+              <div className="flex items-center gap-2">
                 <button 
                   type="button"
                   onClick={() => {
-                  if (!showEmojiPicker) {
-                    // Se vai abrir os emojis, tirar o foco do input para fechar o teclado no mobile
-                    messageInputRef.current?.blur();
-                  }
-                  setShowEmojiPicker(!showEmojiPicker);
-                }}
+                    if (!showEmojiPicker) {
+                      messageInputRef.current?.blur();
+                    }
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
                   className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all active:scale-95 shrink-0 border ${
                     showEmojiPicker 
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
@@ -805,55 +805,6 @@ export default function Chat() {
                 >
                   <Smile className="w-5 h-5" />
                 </button>
-
-                {showEmojiPicker && (
-                  <div className={`
-                    fixed left-0 right-0 bottom-0 bg-white/80 backdrop-blur-2xl z-[100] border-t border-slate-200/50 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] transition-all duration-500 ease-out animate-in slide-in-from-bottom-full
-                    md:absolute md:bottom-24 md:left-0 md:right-auto md:w-[380px] md:h-[480px] md:rounded-[2.5rem] md:mb-0 md:border md:shadow-2xl
-                    ${showEmojiPicker ? 'h-[50vh] md:h-[480px]' : 'h-0 overflow-hidden'}
-                  `}>
-                    {/* Header do Picker no Mobile */}
-                    <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 md:hidden">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-pulse" />
-                        <span className="font-black text-xs uppercase tracking-widest text-slate-800">Seletor de Emojis</span>
-                      </div>
-                      <button 
-                        onClick={() => setShowEmojiPicker(false)} 
-                        className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-red-50 hover:text-red-500 transition-all active:scale-90"
-                      >
-                        <X size={18}/>
-                      </button>
-                    </div>
-
-                    <div className="w-full h-[calc(100%-60px)] md:h-full overflow-hidden custom-emoji-picker">
-                      <EmojiPicker 
-                        onEmojiClick={(emojiData) => {
-                          setNewMessage(prev => prev + emojiData.emoji);
-                          // Múltipla seleção: não fecha!
-                        }}
-                        theme="light"
-                        width="100%"
-                        height="100%"
-                        skinTonesDisabled
-                        searchPlaceholder="Buscar..."
-                        previewConfig={{ showPreview: false }}
-                        lazyLoadEmojis={true}
-                        categories={[
-                          { category: 'suggested', name: 'Recentes' },
-                          { category: 'smileys_people', name: 'Carinhas' },
-                          { category: 'animals_nature', name: 'Natureza' },
-                          { category: 'food_drink', name: 'Comida' },
-                          { category: 'activities', name: 'Atividades' },
-                          { category: 'travel_places', name: 'Viagem' },
-                          { category: 'objects', name: 'Objetos' },
-                          { category: 'symbols', name: 'Símbolos' },
-                          { category: 'flags', name: 'Bandeiras' }
-                        ]}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
               
               <input 
@@ -888,6 +839,27 @@ export default function Chat() {
                 <Send className="w-5 h-5" />
               </button>
             </form>
+
+            {/* Emoji Picker Area (Keyboard Style) */}
+            {showEmojiPicker && (
+              <div className="h-[40vh] md:h-[350px] mt-4 border-t border-slate-50 animate-in slide-in-from-bottom duration-500 ease-out overflow-hidden">
+                <div className="w-full h-full custom-emoji-picker">
+                  <EmojiPicker 
+                    onEmojiClick={(emojiData) => {
+                      setNewMessage(prev => prev + emojiData.emoji);
+                    }}
+                    theme="light"
+                    width="100%"
+                    height="100%"
+                    skinTonesDisabled
+                    searchPlaceholder="Buscar emojis..."
+                    previewConfig={{ showPreview: false }}
+                    lazyLoadEmojis={true}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
           </div>
         </div>
       </div>

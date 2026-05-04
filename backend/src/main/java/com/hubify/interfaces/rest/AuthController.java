@@ -63,10 +63,11 @@ public class AuthController {
         try {
             Optional<User> optUser = authService.findById(userId);
             if (!optUser.isPresent()) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("UsuÃ¡rio nÃ£o encontrado");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Usuário não encontrado");
             }
             
             User user = optUser.get();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             
             if (updateData.containsKey("displayName") && updateData.get("displayName") != null) {
                 user.setDisplayName(updateData.get("displayName").toString());
@@ -78,7 +79,8 @@ public class AuthController {
                 user.setRole(updateData.get("role").toString());
             }
             if (updateData.containsKey("activeDMs") && updateData.get("activeDMs") != null) {
-                user.setActiveDMs(updateData.get("activeDMs").toString());
+                Object val = updateData.get("activeDMs");
+                user.setActiveDMs(val instanceof String ? (String)val : mapper.writeValueAsString(val));
             }
             if (updateData.containsKey("isOnline")) {
                 user.setOnline(Boolean.parseBoolean(updateData.get("isOnline").toString()));
@@ -93,13 +95,14 @@ public class AuthController {
                 user.setPassword(updateData.get("password").toString());
             }
             if (updateData.containsKey("readTimestamps") && updateData.get("readTimestamps") != null) {
-                user.setReadTimestamps(updateData.get("readTimestamps").toString());
+                Object val = updateData.get("readTimestamps");
+                user.setReadTimestamps(val instanceof String ? (String)val : mapper.writeValueAsString(val));
             }
             
             User savedUser = authService.save(user);
             return ResponseEntity.ok(authService.convertToDTO(savedUser));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erro ao atualizar usuÃ¡rio: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erro ao atualizar usuário: " + e.getMessage());
         }
     }
 }

@@ -54,12 +54,18 @@ export const listenToCollection = (path, callback) => {
             id: d.id,
             ...d,
             data: () => ({ 
+              id: d.id,
+              username: d.username,
+              email: d.email,
+              displayName: d.displayName,
               name: d.displayName || d.username, 
               role: d.role, 
               isOnline: d.online, 
-              avatarUrl: d.avatarUrl,
+              avatarUrl: d.avatarUrl, 
               bio: d.bio,
-              status: d.status || (d.online ? 'online' : 'offline')
+              status: d.status || (d.online ? 'online' : 'offline'),
+              readTimestamps: d.readTimestamps,
+              activeDMs: d.activeDMs
             })
           }));
         } else {

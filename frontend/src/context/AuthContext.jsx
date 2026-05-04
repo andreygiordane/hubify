@@ -32,10 +32,23 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Ao logar, já definimos um perfil básico baseado no que recebemos do login
+    let parsedDMs = [];
+    try {
+      parsedDMs = typeof user.activeDMs === 'string' ? JSON.parse(user.activeDMs) : (user.activeDMs || []);
+    } catch (e) {
+      console.error("Erro ao processar activeDMs inicial:", e);
+      parsedDMs = [];
+    }
+
     setCurrentUserProfile({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
       name: user.displayName || user.username,
       avatarUrl: user.avatarUrl,
-      status: user.status || 'online'
+      status: user.status || 'online',
+      readTimestamps: user.readTimestamps,
+      activeDMs: Array.isArray(parsedDMs) ? parsedDMs : []
     });
 
     const markOnline = async () => {

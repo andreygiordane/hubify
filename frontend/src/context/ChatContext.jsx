@@ -372,6 +372,16 @@ export const ChatProvider = ({ children }) => {
       setReadTimestamps(prev => {
         const next = { ...prev, [activeRoomId]: now };
         handleUpdateProfile({ readTimestamps: JSON.stringify(next) }).catch(() => {});
+        
+        // Emitir via socket para atualização em tempo real para o remetente
+        if (socketRef.current) {
+          socketRef.current.emit('messages-read', {
+            roomId: activeRoomId,
+            userId: user.id,
+            timestamp: now
+          });
+        }
+        
         return next;
       });
     } else {
@@ -467,6 +477,20 @@ export const ChatProvider = ({ children }) => {
       });
     });
 
+    socket.on('user-read-messages', ({ userId, roomId, timestamp }) => {
+      setUsers(prev => prev.map(u => {
+        if (u.id === userId) {
+          let currentTimestamps = {};
+          try {
+            currentTimestamps = u.readTimestamps ? JSON.parse(u.readTimestamps) : {};
+          } catch (e) {}
+          const nextTimestamps = { ...currentTimestamps, [roomId]: timestamp };
+          return { ...u, readTimestamps: JSON.stringify(nextTimestamps) };
+        }
+        return u;
+      }));
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -499,7 +523,15 @@ export const ChatProvider = ({ children }) => {
       const myDoc = snap.docs.find(d => d.id === user.id);
       if (myDoc) {
         const data = myDoc.data();
-        if (data.activeDMs) setActiveDMs(data.activeDMs);
+        if (data.activeDMs) {
+          try {
+            const parsedDMs = typeof data.activeDMs === 'string' ? JSON.parse(data.activeDMs) : data.activeDMs;
+            setActiveDMs(Array.isArray(parsedDMs) ? parsedDMs : []);
+          } catch (e) {
+            console.error("Erro ao processar activeDMs:", e);
+            setActiveDMs([]); // Fallback para não travar a UI
+          }
+        }
       }
     });
 
@@ -529,8 +561,18 @@ export const ChatProvider = ({ children }) => {
         const now = Date.now();
         setReadTimestamps(prev => {
           const next = { ...prev, [activeRoomIdRef.current]: now };
-          // Apenas atualizar no banco se houver mudança significativa (debounce opcional aqui, mas vamos direto)
+          // Apenas atualizar no banco se houver mudança significativa
           handleUpdateProfile({ readTimestamps: JSON.stringify(next) }).catch(() => {});
+
+          // Emitir via socket para atualização em tempo real
+          if (socketRef.current) {
+            socketRef.current.emit('messages-read', {
+              roomId: activeRoomIdRef.current,
+              userId: user.id,
+              timestamp: now
+            });
+          }
+
           return next;
         });
       }
@@ -617,7 +659,7 @@ export const ChatProvider = ({ children }) => {
     if (!activeDMs.includes(contactId)) {
       const newDMs = [...activeDMs, contactId];
       setActiveDMs(newDMs);
-      await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: newDMs }, { merge: true });
+      await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(newDMs) }, { merge: true });
     }
     setActiveRoomId(`dm_${[user.id, contactId].sort().join('_')}`);
     setView('chat');
@@ -858,7 +900,7 @@ export const ChatProvider = ({ children }) => {
         const otherId = roomId.replace('dm_', '').split('_').find(id => id !== user.id);
         const newDMs = activeDMs.filter(id => id !== otherId);
         setActiveDMs(newDMs);
-        await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: newDMs }, { merge: true });
+        await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(newDMs) }, { merge: true });
       } else {
         // Se for grupo, remover o usuário do grupo
         const group = groups.find(g => g.id === roomId);

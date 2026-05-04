@@ -3,22 +3,22 @@ import { Peer } from '../utils/WebRTCUtils';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
   const [streams, setStreams] = useState({}); // { [peerID]: { webcam: Stream, screen: Stream } }
-  const [localStream, setLocalStream] = useState(null);       
-  const [cameraStream, setCameraStream] = useState(null);     
-  const [screenStream, setScreenStream] = useState(null); 
+  const [localStream, setLocalStream] = useState(null);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
   const [screenSharing, setScreenSharing] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
   const [time, setTime] = useState(0);
-  
-  const isVoiceMode = callType === 'audio'; 
+
+  const isVoiceMode = callType === 'audio';
   const [isMicOn, setIsMicOn] = useState(true);
   const [isVideoOn, setIsVideoOn] = useState(!isVoiceMode);
-  const [isHandRaised, setIsHandRaised] = useState(false); 
-  const [messages, setMessages] = useState([{ 
-    sender: 'Sistema', 
-    text: `Você entrou na sala!`, 
-    time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
-    isSelf: false 
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [messages, setMessages] = useState([{
+    sender: 'Sistema',
+    text: `Você entrou na sala!`,
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    isSelf: false
   }]);
   const [roomParticipants, setRoomParticipants] = useState([]);
 
@@ -68,13 +68,13 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       setCameraStream(stream);
 
       if (socket) {
-        socket.emit("join-room", { 
-          roomId, 
-          uid: currentUser.uid, 
+        socket.emit("join-room", {
+          roomId,
+          uid: currentUser.uid,
           name: currentUser.name,
           avatarUrl: currentUser.avatarUrl
         });
-        
+
         socket.on('room-participants', updated => {
           setRoomParticipants(updated);
           // Prune streams for users who stopped sharing screen
@@ -93,21 +93,21 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         });
         socket.on('receive-chat', msg => {
           const isSelf = msg.sender === currentUser.name;
-          setMessages(prev => [...prev, { 
-            sender: msg.sender, 
-            text: msg.text, 
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
-            isSelf 
+          setMessages(prev => [...prev, {
+            sender: msg.sender,
+            text: msg.text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isSelf
           }]);
         });
         socket.on('call-ended', () => onLeave());
 
         socket.on('user-joined-room', payload => {
-          setMessages(prev => [...prev, { 
-            sender: 'Sistema', 
-            text: `${payload.name} entrou na sala.`, 
-            time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
-            isSelf: false 
+          setMessages(prev => [...prev, {
+            sender: 'Sistema',
+            text: `${payload.name} entrou na sala.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isSelf: false
           }]);
         });
 
@@ -115,30 +115,30 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           users.forEach(id => {
             const peer = createPeer(id, socket.id, stream);
             peer.on("stream", s => {
-               s.getTracks().forEach(t => {
-                 t.onended = () => {
-                   setStreams(prev => {
-                     const current = prev[id] || {};
-                     if (current.screen && current.screen.id === s.id) {
-                       return { ...prev, [id]: { ...current, screen: null } };
-                     }
-                     return prev;
-                   });
-                 };
-               });
+              s.getTracks().forEach(t => {
+                t.onended = () => {
+                  setStreams(prev => {
+                    const current = prev[id] || {};
+                    if (current.screen && current.screen.id === s.id) {
+                      return { ...prev, [id]: { ...current, screen: null } };
+                    }
+                    return prev;
+                  });
+                };
+              });
 
-               setStreams(prev => {
-                 const current = prev[id] || {};
-                 if (current.webcam && current.webcam.id !== s.id) {
-                   return { ...prev, [id]: { ...current, screen: s } };
-                 }
-                 return { ...prev, [id]: { ...current, webcam: s } };
-               });
-             });
+              setStreams(prev => {
+                const current = prev[id] || {};
+                if (current.webcam && current.webcam.id !== s.id) {
+                  return { ...prev, [id]: { ...current, screen: s } };
+                }
+                return { ...prev, [id]: { ...current, webcam: s } };
+              });
+            });
             peersRef.current.push({ peerID: id, peer });
           });
         });
-        
+
         socket.on("user-joined", payload => {
           const existingPeer = peersRef.current.find(p => p.peerID === payload.callerID);
           if (existingPeer) {
@@ -146,31 +146,31 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           } else {
             const peer = addPeer(payload.signal, payload.callerID, stream);
             peer.on("stream", s => {
-               s.getTracks().forEach(t => {
-                 t.onended = () => {
-                   setStreams(prev => {
-                     const peerID = payload.callerID;
-                     const current = prev[peerID] || {};
-                     if (current.screen && current.screen.id === s.id) {
-                       return { ...prev, [peerID]: { ...current, screen: null } };
-                     }
-                     return prev;
-                   });
-                 };
-               });
+              s.getTracks().forEach(t => {
+                t.onended = () => {
+                  setStreams(prev => {
+                    const peerID = payload.callerID;
+                    const current = prev[peerID] || {};
+                    if (current.screen && current.screen.id === s.id) {
+                      return { ...prev, [peerID]: { ...current, screen: null } };
+                    }
+                    return prev;
+                  });
+                };
+              });
 
-               setStreams(prev => {
-                 const current = prev[payload.callerID] || {};
-                 if (current.webcam && current.webcam.id !== s.id) {
-                   return { ...prev, [payload.callerID]: { ...current, screen: s } };
-                 }
-                 return { ...prev, [payload.callerID]: { ...current, webcam: s } };
-               });
-             });
+              setStreams(prev => {
+                const current = prev[payload.callerID] || {};
+                if (current.webcam && current.webcam.id !== s.id) {
+                  return { ...prev, [payload.callerID]: { ...current, screen: s } };
+                }
+                return { ...prev, [payload.callerID]: { ...current, webcam: s } };
+              });
+            });
             peersRef.current.push({ peerID: payload.callerID, peer });
           }
         });
-        
+
         socket.on("receiving-returned-signal", p => {
           const item = peersRef.current.find(i => i.peerID === p.id);
           if (item) item.peer.signal(p.signal);
@@ -180,11 +180,11 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           setRoomParticipants(currentParticipants => {
             const participant = currentParticipants.find(p => p.socketId === userId);
             if (participant) {
-              setMessages(prev => [...prev, { 
-                sender: 'Sistema', 
-                text: `${participant.name} saiu da reunião.`, 
-                time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), 
-                isSelf: false 
+              setMessages(prev => [...prev, {
+                sender: 'Sistema',
+                text: `${participant.name} saiu da reunião.`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isSelf: false
               }]);
             }
             return currentParticipants.filter(p => p.socketId !== userId);
@@ -247,7 +247,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         setScreenSharing(false);
         return;
       }
-      
+
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       setScreenStream(stream);
       setScreenSharing(true);
@@ -263,9 +263,9 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           try { peer.removeStream(stream); } catch (e) { console.error("Error removing stream:", e); }
         });
       };
-    } catch (err) { 
+    } catch (err) {
       console.error("Screen share error:", err);
-      setScreenSharing(false); 
+      setScreenSharing(false);
     }
   };
 
@@ -276,10 +276,10 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const inviteUser = async (targetId, handleInviteToCall) => {
     if (invitedUserIds.has(targetId)) return;
-    
+
     // Optimistic update to block button immediately
     setInvitedUserIds(prev => new Set(prev).add(targetId));
-    
+
     try {
       await handleInviteToCall(targetId, roomId, callType);
     } catch (err) {
@@ -305,15 +305,15 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const allParticipants = [
     // Local Webcam
-    { 
-      id: socket?.id || 'local', 
+    {
+      id: socket?.id || 'local',
       uid: currentUser?.uid,
-      stream: cameraStream, 
-      isLocal: true, 
-      name: currentUser?.name || 'Você (Eu)', 
+      stream: cameraStream,
+      isLocal: true,
+      name: currentUser?.name || 'Você (Eu)',
       avatarUrl: currentUser?.avatarUrl,
-      handRaised: isHandRaised, 
-      isMicOn, 
+      handRaised: isHandRaised,
+      isMicOn,
       isCamOn: isVideoOn,
       isActuallySharing: screenSharing
     },
@@ -330,38 +330,38 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     }] : []),
     // Remote Participants
     ...Object.entries(streams).flatMap(([socketId, userStreams]) => {
-       const serverState = roomParticipants.find(p => p.socketId === socketId);
-       const isSharing = !!userStreams.screen;
-       const res = [];
-       if (userStreams.webcam) {
-         res.push({
-           id: socketId, 
-           uid: serverState?.uid,
-           stream: userStreams.webcam, 
-           isLocal: false, 
-           name: serverState?.name || `Convidado`, 
-           avatarUrl: serverState?.avatarUrl,
-           handRaised: serverState?.isHandRaised || false,
-           isMicOn: serverState?.isMicOn ?? true,
-           isCamOn: serverState?.isCamOn ?? true,
-           isActuallySharing: isSharing
-         });
-       }
-       if (userStreams.screen && userStreams.screen.active) {
-         res.push({
-           id: socketId + '-screen', 
-           uid: serverState?.uid,
-           stream: userStreams.screen, 
-           isLocal: false, 
-           isScreenSharing: true,
-           name: `Tela de ${serverState?.name || 'Convidado'}`, 
-           avatarUrl: serverState?.avatarUrl,
-           handRaised: false,
-           isMicOn: false,
-           isCamOn: true
-         });
-       }
-       return res;
+      const serverState = roomParticipants.find(p => p.socketId === socketId);
+      const isSharing = !!userStreams.screen;
+      const res = [];
+      if (userStreams.webcam) {
+        res.push({
+          id: socketId,
+          uid: serverState?.uid,
+          stream: userStreams.webcam,
+          isLocal: false,
+          name: serverState?.name || `Convidado`,
+          avatarUrl: serverState?.avatarUrl,
+          handRaised: serverState?.isHandRaised || false,
+          isMicOn: serverState?.isMicOn ?? true,
+          isCamOn: serverState?.isCamOn ?? true,
+          isActuallySharing: isSharing
+        });
+      }
+      if (userStreams.screen && userStreams.screen.active) {
+        res.push({
+          id: socketId + '-screen',
+          uid: serverState?.uid,
+          stream: userStreams.screen,
+          isLocal: false,
+          isScreenSharing: true,
+          name: `Tela de ${serverState?.name || 'Convidado'}`,
+          avatarUrl: serverState?.avatarUrl,
+          handRaised: false,
+          isMicOn: false,
+          isCamOn: true
+        });
+      }
+      return res;
     })
   ];
 

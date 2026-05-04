@@ -5,23 +5,16 @@ export class Peer {
     this.handlers = {};
     this.trickle = trickle;
     this.candidateQueue = [];
-    
+
     if (stream) stream.getTracks().forEach(track => this._pc.addTrack(track, stream));
-    
+
     this._pc.onicecandidate = (e) => {
       if (!this.trickle && !e.candidate) this.emit("signal", this._pc.localDescription);
       else if (this.trickle && e.candidate) this.emit("signal", { candidate: e.candidate });
     };
-    
-    this._remoteStreamIds = new Set();
+
     this._pc.ontrack = (e) => {
-      if (e.streams && e.streams[0]) {
-        const stream = e.streams[0];
-        if (!this._remoteStreamIds.has(stream.id)) {
-          this._remoteStreamIds.add(stream.id);
-          this.emit("stream", stream);
-        }
-      }
+      if (e.streams && e.streams[0]) this.emit("stream", e.streams[0]);
     };
 
     if (initiator) {
@@ -32,28 +25,28 @@ export class Peer {
       }).catch(err => console.error(err));
     }
   }
-  
+
   on(event, fn) { this.handlers[event] = fn; }
   emit(event, data) { if (this.handlers[event]) this.handlers[event](data); }
-  
+
   signal(data) {
     if (!data) return;
     if (data.type === 'offer' || data.type === 'answer') {
       this._pc.setRemoteDescription(new RTCSessionDescription(data))
-        .then(() => { 
-           // Process queued candidates
-           this.candidateQueue.forEach(candidate => {
-               this._pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error(err));
-           });
-           this.candidateQueue = [];
+        .then(() => {
+          // Process queued candidates
+          this.candidateQueue.forEach(candidate => {
+            this._pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error(err));
+          });
+          this.candidateQueue = [];
 
-           if (data.type === 'offer') {
-             return this._pc.createAnswer().then(answer => {
-               return this._pc.setLocalDescription(answer).then(() => {
-                 if (this.trickle) this.emit("signal", answer);
-               });
-             });
-           }
+          if (data.type === 'offer') {
+            return this._pc.createAnswer().then(answer => {
+              return this._pc.setLocalDescription(answer).then(() => {
+                if (this.trickle) this.emit("signal", answer);
+              });
+            });
+          }
         })
         .catch(err => console.error(err));
     } else if (data.candidate) {
@@ -64,13 +57,13 @@ export class Peer {
       }
     }
   }
-  
+
   addStream(stream) {
     if (!stream) return;
     stream.getTracks().forEach(track => {
       this._pc.addTrack(track, stream);
     });
-    
+
     // Trigger re-negotiation
     this._pc.createOffer().then(offer => {
       return this._pc.setLocalDescription(offer).then(() => {
@@ -96,7 +89,7 @@ export class Peer {
       });
     }).catch(err => console.error("Error creating offer during removeStream:", err));
   }
-  
+
   destroy() {
     this._pc.close();
   }

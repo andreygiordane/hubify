@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Peer } from './WebRTCUtils';
+import { Peer } from '../utils/WebRTCUtils';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
   const [streams, setStreams] = useState({});

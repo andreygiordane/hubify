@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Signal, EyeOff, Eye, Hand } from "lucide-react";
-import { useChat } from '../../context/ChatContext';
-import { useCallLogic } from './useCallLogic';
+import { useChat } from '../../../context/ChatContext';
+import { useCallLogic } from '../logic/useCallLogic';
 import { 
   formatTime, useAudioActivity, AudioWave, ChatSidebar, PeopleSidebar, InviteModal, BottomControls 
-} from './CallComponents';
+} from '../shared/CallComponents';
 
 function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = false, handRaised = false }) {
   const ref = useRef(null);

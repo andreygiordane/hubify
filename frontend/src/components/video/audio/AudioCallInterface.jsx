@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useChat } from '../../context/ChatContext';
-import { useCallLogic } from './useCallLogic';
+import { useChat } from '../../../context/ChatContext';
+import { useCallLogic } from '../logic/useCallLogic';
 import { 
   formatTime, ChatSidebar, PeopleSidebar, InviteModal, BottomControls 
-} from './CallComponents';
+} from '../shared/CallComponents';
 
 function MobileVoiceUI({ stream, isMicOn, time, participantName, participantAvatar }) {
   const circularBarsRef = useRef([]);

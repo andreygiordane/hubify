@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
-import AudioCallInterface from './AudioCallInterface';
-import VideoCallInterface from './VideoCallInterface';
+import AudioCallInterface from './audio/AudioCallInterface';
+import VideoCallInterface from './video/VideoCallInterface';
 
 export default function MeetingInterface({ 
   roomId, currentUser, socket, callType, onLeave 

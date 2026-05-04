@@ -32,13 +32,21 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Ao logar, já definimos um perfil básico baseado no que recebemos do login
-    let parsedDMs = [];
-    try {
-      parsedDMs = typeof user.activeDMs === 'string' ? JSON.parse(user.activeDMs) : (user.activeDMs || []);
-    } catch (e) {
-      console.error("Erro ao processar activeDMs inicial:", e);
-      parsedDMs = [];
-    }
+    const parseResilient = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val !== 'string') return [];
+      try {
+        return JSON.parse(val);
+      } catch (e) {
+        // Tenta limpar colchetes e dividir por vírgula se for formato [uuid, uuid] sem aspas
+        if (val.startsWith('[') && val.endsWith(']')) {
+          return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+        }
+        return [];
+      }
+    };
+    const parsedDMs = parseResilient(user.activeDMs);
 
     setCurrentUserProfile({
       id: user.id,

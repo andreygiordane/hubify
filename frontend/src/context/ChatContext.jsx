@@ -557,13 +557,20 @@ export const ChatProvider = ({ children }) => {
       if (myDoc) {
         const data = myDoc.data();
         if (data.activeDMs) {
-          try {
-            const parsedDMs = typeof data.activeDMs === 'string' ? JSON.parse(data.activeDMs) : data.activeDMs;
-            setActiveDMs(Array.isArray(parsedDMs) ? parsedDMs : []);
-          } catch (e) {
-            console.error("Erro ao processar activeDMs:", e);
-            setActiveDMs([]); // Fallback para não travar a UI
-          }
+          const parseResilient = (val) => {
+            if (!val) return [];
+            if (Array.isArray(val)) return val;
+            if (typeof val !== 'string') return [];
+            try {
+              return JSON.parse(val);
+            } catch (e) {
+              if (val.startsWith('[') && val.endsWith(']')) {
+                return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+              }
+              return [];
+            }
+          };
+          setActiveDMs(parseResilient(data.activeDMs));
         }
       }
     });

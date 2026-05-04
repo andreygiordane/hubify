@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { Peer } from '../utils/WebRTCUtils';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
-  const [streams, setStreams] = useState({});
+  const [streams, setStreams] = useState({}); // { [peerID]: { webcam: Stream, screen: Stream } }
   const [localStream, setLocalStream] = useState(null);       
   const [cameraStream, setCameraStream] = useState(null);     
+  const [screenStream, setScreenStream] = useState(null); 
   const [screenSharing, setScreenSharing] = useState(false);
   const [hasConnected, setHasConnected] = useState(false);
   const [time, setTime] = useState(0);
@@ -46,9 +47,9 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   useEffect(() => {
     if (socket && roomId) {
-      socket.emit('update-user-state', { roomId, state: { isMicOn, isCamOn: isVideoOn, isHandRaised } });
+      socket.emit('update-user-state', { roomId, state: { isMicOn, isCamOn: isVideoOn, isHandRaised, isScreenSharing: screenSharing } });
     }
-  }, [isMicOn, isVideoOn, isHandRaised]);
+  }, [isMicOn, isVideoOn, isHandRaised, screenSharing]);
 
   useEffect(() => {
     if (roomId && roomId.startsWith('dm_')) {
@@ -74,7 +75,22 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           avatarUrl: currentUser.avatarUrl
         });
         
-        socket.on('room-participants', updated => setRoomParticipants(updated));
+        socket.on('room-participants', updated => {
+          setRoomParticipants(updated);
+          // Prune streams for users who stopped sharing screen
+          setStreams(prev => {
+            const next = { ...prev };
+            let changed = false;
+            Object.keys(next).forEach(sid => {
+              const p = updated.find(part => part.socketId === sid);
+              if (next[sid].screen && (!p || !p.isScreenSharing)) {
+                next[sid] = { ...next[sid], screen: null };
+                changed = true;
+              }
+            });
+            return changed ? next : prev;
+          });
+        });
         socket.on('receive-chat', msg => {
           const isSelf = msg.sender === currentUser.name;
           setMessages(prev => [...prev, { 
@@ -98,7 +114,27 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         socket.on("all-users", users => {
           users.forEach(id => {
             const peer = createPeer(id, socket.id, stream);
-            peer.on("stream", s => setStreams(prev => ({ ...prev, [id]: s })));
+            peer.on("stream", s => {
+               s.getTracks().forEach(t => {
+                 t.onended = () => {
+                   setStreams(prev => {
+                     const current = prev[id] || {};
+                     if (current.screen && current.screen.id === s.id) {
+                       return { ...prev, [id]: { ...current, screen: null } };
+                     }
+                     return prev;
+                   });
+                 };
+               });
+
+               setStreams(prev => {
+                 const current = prev[id] || {};
+                 if (current.webcam && current.webcam.id !== s.id) {
+                   return { ...prev, [id]: { ...current, screen: s } };
+                 }
+                 return { ...prev, [id]: { ...current, webcam: s } };
+               });
+             });
             peersRef.current.push({ peerID: id, peer });
           });
         });
@@ -109,7 +145,28 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
             existingPeer.peer.signal(payload.signal);
           } else {
             const peer = addPeer(payload.signal, payload.callerID, stream);
-            peer.on("stream", s => setStreams(prev => ({ ...prev, [payload.callerID]: s })));
+            peer.on("stream", s => {
+               s.getTracks().forEach(t => {
+                 t.onended = () => {
+                   setStreams(prev => {
+                     const peerID = payload.callerID;
+                     const current = prev[peerID] || {};
+                     if (current.screen && current.screen.id === s.id) {
+                       return { ...prev, [peerID]: { ...current, screen: null } };
+                     }
+                     return prev;
+                   });
+                 };
+               });
+
+               setStreams(prev => {
+                 const current = prev[payload.callerID] || {};
+                 if (current.webcam && current.webcam.id !== s.id) {
+                   return { ...prev, [payload.callerID]: { ...current, screen: s } };
+                 }
+                 return { ...prev, [payload.callerID]: { ...current, webcam: s } };
+               });
+             });
             peersRef.current.push({ peerID: payload.callerID, peer });
           }
         });
@@ -178,33 +235,38 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   const shareScreen = async () => {
     try {
       if (screenSharing) {
-        setLocalStream(cameraStream);
-        const videoTrack = cameraStream.getVideoTracks()[0];
         peersRef.current.forEach(({ peer }) => {
-          const sender = peer._pc.getSenders().find(s => s.track && s.track.kind === "video");
-          if (sender) sender.replaceTrack(videoTrack);
+          if (screenStream) {
+            try { peer.removeStream(screenStream); } catch (e) { console.error("Error removing stream:", e); }
+          }
         });
+        if (screenStream) {
+          screenStream.getTracks().forEach(t => t.stop());
+        }
+        setScreenStream(null);
         setScreenSharing(false);
         return;
       }
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const track = screenStream.getVideoTracks()[0];
+      
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      setScreenStream(stream);
       setScreenSharing(true);
-      setLocalStream(new MediaStream([track, cameraStream.getAudioTracks()[0]]));
 
       peersRef.current.forEach(({ peer }) => {
-        const sender = peer._pc.getSenders().find(s => s.track && s.track.kind === "video");
-        if (sender) sender.replaceTrack(track);
+        peer.addStream(stream);
       });
-      track.onended = () => {
+
+      stream.getVideoTracks()[0].onended = () => {
         setScreenSharing(false);
-        setLocalStream(cameraStream);
+        setScreenStream(null);
         peersRef.current.forEach(({ peer }) => {
-            const sender = peer._pc.getSenders().find(s => s.track && s.track.kind === "video");
-            if (sender) sender.replaceTrack(cameraStream.getVideoTracks()[0]);
+          try { peer.removeStream(stream); } catch (e) { console.error("Error removing stream:", e); }
         });
       };
-    } catch (err) { setScreenSharing(false); }
+    } catch (err) { 
+      console.error("Screen share error:", err);
+      setScreenSharing(false); 
+    }
   };
 
   const handleSendMessage = (text) => {
@@ -242,30 +304,64 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   };
 
   const allParticipants = [
+    // Local Webcam
     { 
       id: socket?.id || 'local', 
       uid: currentUser?.uid,
-      stream: localStream, 
+      stream: cameraStream, 
       isLocal: true, 
       name: currentUser?.name || 'Você (Eu)', 
       avatarUrl: currentUser?.avatarUrl,
       handRaised: isHandRaised, 
       isMicOn, 
-      isCamOn: isVideoOn 
+      isCamOn: isVideoOn,
+      isActuallySharing: screenSharing
     },
-    ...Object.entries(streams).map(([socketId, stream]) => {
+    ...(screenSharing && screenStream && screenStream.active ? [{
+      id: (socket?.id || 'local') + '-screen',
+      uid: currentUser?.uid,
+      stream: screenStream,
+      isLocal: true,
+      isScreenSharing: true,
+      name: `Tela de ${currentUser?.name || 'Você'}`,
+      handRaised: false,
+      isMicOn: false,
+      isCamOn: true
+    }] : []),
+    // Remote Participants
+    ...Object.entries(streams).flatMap(([socketId, userStreams]) => {
        const serverState = roomParticipants.find(p => p.socketId === socketId);
-       return {
-         id: socketId, 
-         uid: serverState?.uid,
-         stream, 
-         isLocal: false, 
-         name: serverState?.name || `Convidado ${socketId.substring(0,4)}`, 
-         avatarUrl: serverState?.avatarUrl,
-         handRaised: serverState?.isHandRaised || false,
-         isMicOn: serverState?.isMicOn ?? true,
-         isCamOn: serverState?.isCamOn ?? true
-       };
+       const isSharing = !!userStreams.screen;
+       const res = [];
+       if (userStreams.webcam) {
+         res.push({
+           id: socketId, 
+           uid: serverState?.uid,
+           stream: userStreams.webcam, 
+           isLocal: false, 
+           name: serverState?.name || `Convidado`, 
+           avatarUrl: serverState?.avatarUrl,
+           handRaised: serverState?.isHandRaised || false,
+           isMicOn: serverState?.isMicOn ?? true,
+           isCamOn: serverState?.isCamOn ?? true,
+           isActuallySharing: isSharing
+         });
+       }
+       if (userStreams.screen && userStreams.screen.active) {
+         res.push({
+           id: socketId + '-screen', 
+           uid: serverState?.uid,
+           stream: userStreams.screen, 
+           isLocal: false, 
+           isScreenSharing: true,
+           name: `Tela de ${serverState?.name || 'Convidado'}`, 
+           avatarUrl: serverState?.avatarUrl,
+           handRaised: false,
+           isMicOn: false,
+           isCamOn: true
+         });
+       }
+       return res;
     })
   ];
 

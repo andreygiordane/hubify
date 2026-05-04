@@ -13,8 +13,15 @@ export class Peer {
       else if (this.trickle && e.candidate) this.emit("signal", { candidate: e.candidate });
     };
     
+    this._remoteStreamIds = new Set();
     this._pc.ontrack = (e) => {
-      if (e.streams && e.streams[0]) this.emit("stream", e.streams[0]);
+      if (e.streams && e.streams[0]) {
+        const stream = e.streams[0];
+        if (!this._remoteStreamIds.has(stream.id)) {
+          this._remoteStreamIds.add(stream.id);
+          this.emit("stream", stream);
+        }
+      }
     };
 
     if (initiator) {
@@ -56,6 +63,38 @@ export class Peer {
         this.candidateQueue.push(data.candidate);
       }
     }
+  }
+  
+  addStream(stream) {
+    if (!stream) return;
+    stream.getTracks().forEach(track => {
+      this._pc.addTrack(track, stream);
+    });
+    
+    // Trigger re-negotiation
+    this._pc.createOffer().then(offer => {
+      return this._pc.setLocalDescription(offer).then(() => {
+        this.emit("signal", offer);
+      });
+    }).catch(err => console.error("Error creating offer during addStream:", err));
+  }
+
+  removeStream(stream) {
+    if (!stream) return;
+    const senders = this._pc.getSenders();
+    stream.getTracks().forEach(track => {
+      const sender = senders.find(s => s.track === track);
+      if (sender) {
+        this._pc.removeTrack(sender);
+      }
+    });
+
+    // Trigger re-negotiation
+    this._pc.createOffer().then(offer => {
+      return this._pc.setLocalDescription(offer).then(() => {
+        this.emit("signal", offer);
+      });
+    }).catch(err => console.error("Error creating offer during removeStream:", err));
   }
   
   destroy() {

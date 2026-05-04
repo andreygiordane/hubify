@@ -154,6 +154,11 @@ export const ChatProvider = ({ children }) => {
       const otherId = rId.replace('dm_', '').split('_').find(id => id !== user.id);
       const contact = users.find(u => u.id === otherId);
 
+      if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
+        alert(`${contact.name} está em outra reunião ou ocupado no momento.`);
+        return;
+      }
+
       setCallType('video');
       setMediaSettings({ video: true, audio: true });
       setIsOutgoingCall(true);
@@ -239,6 +244,11 @@ export const ChatProvider = ({ children }) => {
       const otherId = rId.replace('dm_', '').split('_').find(id => id !== user.id);
       const contact = users.find(u => u.id === otherId);
 
+      if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
+        alert(`${contact.name} está em outra reunião ou ocupado no momento.`);
+        return;
+      }
+
       setCallType('audio');
       setMediaSettings({ video: false, audio: true });
       setIsOutgoingCall(true);
@@ -311,8 +321,6 @@ export const ChatProvider = ({ children }) => {
       roomId: roomId,
       timestamp: Date.now()
     });
-    setSuccessMessage(`Convite enviado para ${contact?.name || 'usuário'}`);
-    setShowSuccessModal(true);
   };
 
   const handleSendMessage = async (text, attachment = null, replyToId = null) => {

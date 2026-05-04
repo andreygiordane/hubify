@@ -244,6 +244,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   const allParticipants = [
     { 
       id: socket?.id || 'local', 
+      uid: currentUser?.uid,
       stream: localStream, 
       isLocal: true, 
       name: currentUser?.name || 'Você (Eu)', 
@@ -256,6 +257,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
        const serverState = roomParticipants.find(p => p.socketId === socketId);
        return {
          id: socketId, 
+         uid: serverState?.uid,
          stream, 
          isLocal: false, 
          name: serverState?.name || `Convidado ${socketId.substring(0,4)}`, 

@@ -228,7 +228,7 @@ export function InviteModal({
             </div>
           ) : (
             filteredUsers.map(u => {
-              const isAlreadyInRoom = participants.some(p => p.id === u.id || (p.isLocal && currentUser?.uid === u.id));
+              const isAlreadyInRoom = participants.some(p => p.uid === u.id || (p.isLocal && currentUser?.uid === u.id));
               const isInvited = invitedUserIds.has(u.id);
               const isBusy = u.status === 'reuniao' || u.status === 'ocupado';
               

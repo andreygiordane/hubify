@@ -147,6 +147,10 @@ export const ChatProvider = ({ children }) => {
   }, [activeRoomId]);
 
   const handleStartMeeting = async (forcedRoomId = null) => {
+    if (view === 'room') {
+      alert("Você já está em uma chamada ativa. Encerre-a antes de iniciar outra.");
+      return;
+    }
     const rId = forcedRoomId || activeRoomId;
     if (!rId) return;
 
@@ -211,6 +215,9 @@ export const ChatProvider = ({ children }) => {
 
         group.members.forEach(async (memberId) => {
           if (memberId !== user.id) {
+            const member = users.find(u => u.id === memberId);
+            if (member?.status === 'reuniao' || member?.status === 'ocupado') return;
+
             const callId = `call_${Date.now()}_${memberId}`;
             await createDocument(`artifacts/${appId}/public/data/calls`, {
               id: callId,
@@ -237,6 +244,10 @@ export const ChatProvider = ({ children }) => {
   };
 
   const handleStartAudioCall = async (forcedRoomId = null) => {
+    if (view === 'room') {
+      alert("Você já está em uma chamada ativa. Encerre-a antes de iniciar outra.");
+      return;
+    }
     const rId = forcedRoomId || activeRoomId;
     if (!rId) return;
 
@@ -283,6 +294,9 @@ export const ChatProvider = ({ children }) => {
 
         group.members.forEach(async (memberId) => {
           if (memberId !== user.id) {
+            const member = users.find(u => u.id === memberId);
+            if (member?.status === 'reuniao' || member?.status === 'ocupado') return;
+
             const callId = `call_${Date.now()}_${memberId}`;
             await createDocument(`artifacts/${appId}/public/data/calls`, {
               id: callId,
@@ -308,7 +322,18 @@ export const ChatProvider = ({ children }) => {
   };
 
   const handleInviteToCall = async (targetId, roomId, type) => {
+    if (view !== 'room') {
+      // Se não estivermos em uma sala, não faz sentido convidar para uma (a menos que seja o fluxo de início)
+      // Mas aqui especificamente bloqueamos se estivermos tentando convidar de fora? 
+      // Na verdade, o usuário quer que se estivermos em uma chamada, não possamos convidar (para outra?).
+    }
+    
     const contact = users.find(u => u.id === targetId);
+    if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
+      alert(`${contact.name} já está em uma reunião ou ocupado.`);
+      return;
+    }
+
     const callId = `call_invite_${Date.now()}_${targetId}`;
     await createDocument(`artifacts/${appId}/public/data/calls`, {
       id: callId,
@@ -1096,7 +1121,7 @@ export const ChatProvider = ({ children }) => {
     selectedChatMobile, setSelectedChatMobile,
     meetingNotifications, setMeetingNotifications,
     mutedRooms, toggleMuteRoom,
-    typingUsers, setTyping
+    typingUsers, setTyping, userStatus
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

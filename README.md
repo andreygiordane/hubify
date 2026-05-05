@@ -1,4 +1,4 @@
-# Hubify - Documentacao Tecnica Completa e Extensa v4.5.0
+# Hubify - Documentacao Tecnica de Engenharia v4.5.0
 
 Hubify e uma plataforma enterprise-grade de comunicacao unificada, projetada para oferecer uma experiencia de usuario premium aliada a uma infraestrutura tecnica robusta. Este documento serve como o guia definitivo sobre a arquitetura, implementacao e funcionamento interno de todos os componentes do ecossistema Hubify.
 
@@ -8,125 +8,190 @@ Hubify e uma plataforma enterprise-grade de comunicacao unificada, projetada par
 
 O Hubify nasceu da necessidade de uma ferramenta de comunicacao que nao apenas conectasse pessoas, mas que fizesse isso de forma fluida, estetica e tecnicamente eficiente. A plataforma integra mensagens instantaneas, chamadas de video P2P, gestao de eventos em calendario e administracao de grupos, tudo sob uma arquitetura de microservicos containerizada.
 
+### 1.1 Missao do Projeto
+Fornecer comunicacao corporativa com latencia zero, interface intuitiva e seguranca de dados, eliminando a friccao entre equipes remotas.
+
 ---
 
 ## 2. Stack de Tecnologias (Analise Profunda)
 
-### 2.1 Frontend: A Camada de Apresentacao
-O frontend e construido utilizando **React.js** com a ferramenta de build **Vite**, garantindo tempos de recarregamento (HMR) ultra-rapidos e um bundle final otimizado.
+### 2.1 Frontend: Camada de Apresentacao e Estado
+O frontend e construido utilizando **React.js** com a ferramenta de build **Vite**, garantindo performance superior tanto em desenvolvimento quanto em producao.
 
-- **Gerenciamento de Estado**: Utiliza a **Context API** do React para evitar o prop-drilling e manter estados globais como mensagens, informacoes de usuario e sessoes de video sincronizadas.
-- **Estilizacao**: **Tailwind CSS** e a base para o design system. A escolha pelo Tailwind permite uma iteracao rapida na UI mantendo um baixo tamanho de CSS final.
-- **Animacoes**: **Framer Motion** e utilizado para criar transicoes de pagina "app-like" e feedbacks de micro-interacao (hover, tap, modals).
-- **Comunicacao**: O frontend utiliza uma abordagem hibrida entre **Axios** para requisicoes REST e **Socket.io-client** para eventos de tempo real que nao exigem persistencia imediata (ex: digitacao).
-- **WebRTC**: Utiliza a biblioteca **Simple-Peer** para abstrair a complexidade nativa do WebRTC, facilitando a troca de sdp e candidatos ICE entre os pares.
+- **Gerenciamento de Estado Global**: Utiliza a **Context API** do React. Optamos por nao usar Redux para evitar complexidade desnecessaria, ja que o Contexto nativo com `useReducer` e `useState` atende perfeitamente a demanda de sessoes de chat e video.
+- **Design System**: Baseado em **Tailwind CSS**, permitindo uma interface "Pixel Perfect" com zero arquivos CSS gigantescos.
+- **Micro-interacoes**: **Framer Motion** gerencia o ciclo de vida dos componentes na arvore DOM (animacoes de entrada e saida).
+- **Protocolos de Rede**:
+    - **HTTP/REST**: Para operacoes de dados estaticos e configuracoes.
+    - **WebSockets (Socket.io)**: Para eventos que exigem "Push" do servidor (notificacoes, digitacao).
+    - **WebRTC**: Para transmissao de pacotes UDP de audio e video diretamente entre usuarios.
+- **Gerenciamento de Midia**: Utiliza a biblioteca **Simple-Peer** como wrapper do WebRTC nativo para facilitar o gerenciamento de sessoes e candidatos ICE.
 
-### 2.2 Backend: O Motor de Processamento
-O core do sistema e uma aplicacao **Spring Boot** escrita em **Java 17**, seguindo as melhores praticas de desenvolvimento corporativo.
+### 2.2 Backend: O Coracao da Logica e Persistencia
+Baseado em **Java 17** com **Spring Boot**, o backend e responsavel por orquestrar a seguranca e a integridade dos dados.
 
-- **Seguranca**: Implementacao customizada do **Spring Security** para gerenciar a autenticacao e autorizacao.
-- **Persistencia**: O sistema utiliza um padrão de **Document Repository** flexivel, onde documentos JSON sao armazenados e consultados de forma dinamica, permitindo que a estrutura do chat evolua sem migracoes de banco de dados pesadas.
-- **Integracao**: Expoe uma API RESTful consumida pelo frontend, protegida por CORS e politicas de seguranca rigorosas.
-- **Migrations**: O `DatabaseMigrationRunner` garante que o esquema do banco (seja MySQL ou PostgreSQL) esteja sempre alinhado com o codigo no momento do startup.
+- **Seguranca**: Camada de **Spring Security** com configuracao Stateless.
+- **Persistencia Dinamica**: Implementacao de um sistema de documentos JSON sobre banco de dados relacional, permitindo que a aplicacao se comporte como um NoSQL em termos de flexibilidade de esquema.
+- **Build Engine**: **Maven** para gestao de dependencias e lifecycle de compilacao.
 
-### 2.3 Video Server: O Sinalizador
-Um servico leve em **Node.js** que atua como o "matchmaker" das conexoes de video.
+### 2.3 Video Signaling Server
+Servico especializado em **Node.js** responsavel por unir os pares WebRTC.
 
-- **Socket.io**: Gerencia salas de sinalizacao onde os usuarios trocam suas credenciais WebRTC.
-- **Event Lifecycle**: Escuta eventos de `join`, `call`, `answer` e `candidate`, roteando-os para o destinatario correto sem nunca tocar no fluxo de midia (preservando a privacidade P2P).
-
----
-
-## 3. Arquitetura do Frontend (Detalhamento de Pastas e Componentes)
-
-### 3.1 Componentes de Chat (`/src/components/chat`)
-- **`ChatList.jsx`**: Gerencia a renderizacao da lista lateral de conversas. Inclui logica de filtragem por busca, contagem de mensagens nao lidas e o banner de convites para grupos.
-- **`ChatMessages.jsx`**: Responsavel pela area de visualizacao de mensagens. Implementa o scroll automatico, renderizacao de diferentes tipos de midia (imagens, arquivos) e a nova camada de wallpapers SVG.
-- **`ChatRoomItem.jsx`**: Representacao individual de uma conversa na lista, lidando com estados de presenca e previews de ultima mensagem.
-
-### 3.2 Componentes de Video (`/src/components/video`)
-- **`useCallLogic.js`**: Hook customizado que isola toda a logica de sinalizacao e gerenciamento de stream. Mantem o estado da chamada (calling, ringing, connected) e gerencia os timeouts de conexao.
-- **`WebVideoCallInterface.jsx`**: Interface otimizada para desktops, com layouts side-by-side e controles flutuantes.
-- **`MobileVideoCallInterface.jsx`**: Interface verticalizada, focada em gestos e aproveitamento total da tela de dispositivos moveis.
-
-### 3.3 Gestao de Estado (`/src/context`)
-- **`ChatContext.jsx`**: O componente mais complexo do sistema. Ele gerencia:
-    - O polling de mensagens (atualizacao em tempo real).
-    - A logica de exclusao otimista (remocao imediata da UI enquanto o backend processa).
-    - A persistencia de timestamps de leitura para evitar que conversas antigas "pulem" na lista.
-    - A engine de wallpapers customizados.
+- **Sinalizacao**: Utiliza `Socket.io` para troca de `SDP (Session Description Protocol)` e `ICE Candidates`.
+- **Rooms**: Gerenciamento de sessoes temporarias para chamadas de video, garantindo que os sinais nao vazem entre conversas diferentes.
 
 ---
 
-## 4. Arquitetura do Backend (Camadas e Fluxos)
+## 3. Arquitetura de Pastas e Componentes (Frontend)
 
-### 4.1 Entidades de Dominio
-- **`User`**: Armazena credenciais, perfil e metadados de status.
-- **`Document`**: Entidade generica para armazenamento de mensagens, grupos e configuracoes.
+### 3.1 Diretorio `/src/components`
+A organizacao segue principios de design atomico e responsabilidade unica:
 
-### 4.2 Controladores (`/interfaces/rest`)
-- **`DocumentController`**: Ponto central para operacoes CRUD de dados do app. Suporta operacoes de PATCH para atualizacoes parciais (ex: mudar apenas o wallpaper de uma sala).
-- **`AuthController`**: Gerencia o ciclo de vida da sessao do usuario.
+#### 3.1.1 `chat/`
+- **`ChatList.jsx`**: 
+    - Funcao: Renderizar a lista de conversas ativas e grupos.
+    - Detalhe Tecnico: Implementa `useMemo` para filtrar conversas e otimizar a renderizacao em listas grandes ( > 1000 chats).
+- **`ChatMessages.jsx`**: 
+    - Funcao: Container principal de mensagens.
+    - Logica: Gerencia o scroll inteligente que detecta se o usuario esta no final da pagina antes de forcar o scroll em novas mensagens.
+- **`ChatRoomItem.jsx`**: 
+    - Funcao: Item individual da lista.
+    - UI: Exibe previews de mensagens, contagem de nao lidas e status de presenca online/offline.
 
-### 4.3 Servicos (`/application/service`)
-- **`AuthService`**: Contem a logica de validacao de credenciais e integracao com a camada de persistencia.
+#### 3.1.2 `video/`
+- **`useCallLogic.js`**: 
+    - Core: Hook que encapsula toda a maquina de estados de uma chamada (IDLE -> CALLING -> RINGING -> CONNECTED -> DISCONNECTED).
+- **`WebVideoCallInterface.jsx`**: 
+    - Design: Layout horizontal otimizado para monitores ultrawide, com suporte a Picture-in-Picture.
+- **`MobileVideoCallInterface.jsx`**: 
+    - Design: Foco em ergonomia mobile, botoes grandes e suporte a orientacao portrait/landscape.
 
----
-
-## 5. Logicas de Negocio e Algoritmos Especializados
-
-### 5.1 Otimizacao de Exclusao Real-Time
-Para evitar o problema comum em sistemas de polling onde um item deletado reaparece momentaneamente (flicker), o Hubify utiliza um sistema de **"Processing Deletions"**. 
-1. O frontend registra o ID da sala em um `Set` local.
-2. O filtro de renderizacao ignora qualquer dado vindo do servidor que corresponda a um ID nesse `Set`.
-3. Somente apos a confirmacao do backend de que o registro foi removido fisicamente, o ID e retirado do `Set`.
-
-### 5.2 Engine de Wallpapers Dinamicos
-Em vez de carregar imagens pesadas, o Hubify utiliza **padrões SVG injetados via Data URI**. Isso permite:
-- Zero latencia no carregamento do fundo do chat.
-- Customizacao total de cores e opacidades via codigo.
-- Baixissimo consumo de memoria RAM no navegador.
-
-### 5.3 Handshake WebRTC Mobile
-Devido as restricoes de economia de bateria em dispositivos moveis, o fluxo de sinalizacao inclui buffers de tempo e tentativas de reconexao silenciosas para garantir que a chamada nao caia ao trocar de rede (ex: Wi-Fi para 4G).
+### 3.2 Diretorio `/src/context`
+- **`ChatContext.jsx`**: 
+    - Logica de Polling: Mantem um `setInterval` que sincroniza documentos a cada 350ms.
+    - Optimistic Deletion: Utiliza a referencia `processingDeletions` para garantir que salas excluidas nao reaparecam na UI antes do banco de dados confirmar a delecao.
+    - Wallpapers: Gerencia o dicionario de IDs de papel de parede e persiste no `LocalStorage`.
 
 ---
 
-## 6. Deployment e Infraestrutura
+## 4. Arquitetura do Backend (Deep Dive)
 
-### 6.1 Containerizacao (Docker)
-O projeto e totalmente distribuido via `docker-compose`. 
-- **`Dockerfile` Frontend**: Utiliza build multi-stage. Primeiro compila o React e depois serve os estaticos via **Nginx** otimizado.
-- **`Dockerfile` Backend**: Utiliza Maven para compilar o `.jar` e uma imagem leve de JRE para execucao.
+### 4.1 Camada de APIs (`com.hubify.interfaces.rest`)
+- **`DocumentController.java`**: 
+    - Metodo `saveDocument`: Recebe um objeto generico e persiste no caminho especificado.
+    - Metodo `patchDocument`: Permite atualizacao parcial de campos (ex: marcar mensagem como lida ou trocar wallpaper).
+- **`AuthController.java`**: 
+    - Gerencia o login e registro, retornando o perfil completo do usuario para o frontend.
 
-### 6.2 Estrategia de Deploy (GCP)
-O Hubify e desenhado para o **Google Cloud Platform**:
-- **Cloud Run**: Hospedagem serverless dos containers de frontend, backend e video.
-- **Cloud SQL**: Banco de dados MySQL gerenciado.
-- **Cloud Storage**: Para armazenamento de midias grandes enviadas pelos usuarios.
-
----
-
-## 7. Guia de Manutencao
-
-### Adicionando Novos Wallpapers
-Basta adicionar um novo objeto ao array `wallpapers` no arquivo `Chat.jsx`, definindo o nome e o padrão SVG desejado.
-
-### Alterando a Frequencia de Sincronizacao
-No arquivo `api-client.js`, a variavel de intervalo do `listenToCollection` pode ser ajustada. O padrao de 350ms e o equilibrio ideal entre "tempo real" e carga no servidor.
+### 4.2 Camada de Dominio e Persistencia
+- **`Document.java`**: Entidade central que representa qualquer dado no sistema (mensagem, grupo, configuracao).
+- **`User.java`**: Representacao do usuario, incluindo status de presenca e read-timestamps.
+- **`DocumentRepository.java`**: Abstracao do banco de dados, realizando buscas otimizadas por caminho e dono do documento.
 
 ---
 
-## 8. Consideracoes Finais
+## 5. Fluxos de Trabalho Tecnicos
 
-O Hubify v4.5.0 representa o apice do desenvolvimento desta plataforma, unindo estabilidade tecnica com uma interface que encanta o usuario. A modularidade do codigo permite que novas funcionalidades sejam adicionadas com impacto minimo nas estruturas existentes.
+### 5.1 O Ciclo de Vida de uma Chamada de Video
+1. **Inicio**: O usuario A envia um evento `call-user` via Socket ao servidor de sinalizacao.
+2. **Notificacao**: O servidor roteia o evento para o usuario B.
+3. **Aceite**: O usuario B gera um `Answer` (SDP) e envia de volta ao usuario A.
+4. **ICE Candidates**: Ambos os pares trocam informações de rede para encontrar a melhor rota (STUN/TURN).
+5. **Conexao**: A stream de midia e estabelecida diretamente entre os navegadores (P2P).
+
+### 5.2 Sincronizacao Real-Time Otimizada
+O Hubify nao depende exclusivamente de WebSockets para o estado persistente do chat. Utilizamos uma abordagem de **Polling Inteligente**:
+- O frontend compara o `hash` do conteudo recebido do servidor com o `hash` local.
+- Somente se houver mudanca, o estado do React e atualizado, disparando a re-renderizacao.
+- Isso reduz drasticamente o uso de CPU e bateria em dispositivos moveis.
+
+### 5.3 Engine de Wallpapers SVG
+O sistema de papeis de parede nao utiliza imagens rasterizadas (JPEG/PNG). 
+- Cada wallpaper e um **padrão SVG** gerado via codigo.
+- Vantagem: Escalabilidade infinita sem perda de qualidade e peso de apenas alguns bytes por pattern.
+
+---
+
+## 6. Seguranca e Privacidade
+
+- **Isolamento de Dados**: O backend valida se o usuario que solicita um documento tem permissao (é membro do grupo ou destinatario da DM).
+- **Criptografia em Trânsito**: Todas as comunicacoes sao protegidas por TLS/SSL via Nginx.
+- **WebRTC Privacy**: O trafego de video e criptografado de ponta a ponta (E2EE) por natureza do protocolo WebRTC.
+
+---
+
+## 7. Infraestrutura e DevOps
+
+### 7.1 Docker Orchestration
+O `docker-compose.yml` unifica o ecossistema:
+- `hubify-db`: MySQL 8.0 gerenciado.
+- `hubify-backend`: Container Java 17.
+- `hubify-video-server`: Container Node.js.
+- `hubify-frontend`: Servidor Nginx servindo o build de producao do Vite.
+
+### 7.2 Scripts de Automacao
+- **`hubify-local.ps1`**: Faz o setup do ambiente local, configurando variaveis de ambiente e subindo os containers.
+- **`hubify-deploy.ps1`**: Automatiza o push das imagens para o Google Artifact Registry e o deploy no Google Cloud Run.
+
+---
+
+## 8. Troubleshooting e Manutencao
+
+### 8.1 Problemas de Video (Camera/Audio)
+- Verifique se o `Socket.io` esta conectado (veja o log do console).
+- Garanta que ambos os usuarios estejam em contextos seguros (HTTPS ou localhost).
+- Verifique se os permissoes de camera/microfone foram concedidas no navegador.
+
+### 8.2 Lentidao na Sincronizacao
+- Verifique a latencia de rede para o backend.
+- O intervalo de polling em `api-client.js` pode ser reduzido, mas aumentara a carga no servidor.
+
+---
+
+## 9. Conclusao
+
+O Hubify v4.5.0 e uma solucao madura que equilibra complexidade tecnica com facilidade de uso. Sua arquitetura modular garante que o projeto seja facil de manter e expandir para novas funcionalidades (como bots, integracoes com IA, etc).
+
+---
+
+## 10. Referencias e Tecnologias
+
+| Tecnologia | Versao | Uso |
+|------------|--------|-----|
+| React | 18+ | Frontend UI |
+| Spring Boot | 3+ | Backend API |
+| Node.js | 18+ | Video Signaling |
+| Socket.io | 4+ | Real-time Events |
+| WebRTC | Native | P2P Video/Audio |
+| Docker | 20+ | Containerization |
 
 ---
 
 **Desenvolvido por Andrey Giordane**  
-*Engenharia de Software de Alta Performance.*  
+*Senior Software Engineer & Architect.*  
 GitHub: [andreygiordane](https://github.com/andreygiordane)  
 Email: andreycostaa@gmail.com
 
 ---
-*Este documento possui carater tecnico e extensivo, servindo como base para onboarding de novos desenvolvedores e auditoria de sistemas.*
+
+### Apendice A: Tabela de Endpoints API
+
+| Verbo | Rota | Descricao |
+|-------|------|-----------|
+| POST | `/api/auth/login` | Autenticacao de usuario |
+| GET | `/api/data/collections/{path}` | Busca colecao de documentos |
+| POST | `/api/data/documents/{path}` | Cria ou substitui documento |
+| PATCH | `/api/data/documents/{path}` | Atualizacao parcial |
+| DELETE | `/api/data/documents/{path}` | Remove documento do sistema |
+
+### Apendice B: Eventos Socket.io (Video Server)
+
+| Evento | Direcao | Payload | Descricao |
+|--------|---------|---------|-----------|
+| `call-user` | Outbound | `{ offer, to }` | Inicia chamada |
+| `make-answer` | Inbound | `{ answer, to }` | Responde chamada |
+| `ice-candidate` | Bidirecional | `{ candidate, to }` | Troca de rota de rede |
+| `messages-read` | Bidirecional | `{ roomId, userId }` | Notificacao de leitura |
+
+---
+*Fim da Documentacao.*

@@ -22,62 +22,67 @@ export const getDocumentPath = (db, ...paths) => {
  */
 export const listenToCollection = (path, callback) => {
   let interval;
+  let lastHash = '';
   
   const fetchPath = async () => {
     try {
       let url = '';
       const isUser = path.includes('users');
       
-      if (isUser) {
-        url = `${API_URL}/auth/users`;
-      } else if (path.includes('messages')) {
-        url = `${API_URL}/data/messages`;
-      } else if (path.includes('groups')) {
-        url = `${API_URL}/data/groups`;
-      } else if (path.includes('meetings')) {
-        url = `${API_URL}/data/meetings`;
-      } else if (path.includes('calls')) {
-        url = `${API_URL}/data/calls`;
-      } else if (path.includes('invites')) {
-        url = `${API_URL}/data/invites`;
-      }
+      if (isUser) url = `${API_URL}/auth/users`;
+      else if (path.includes('messages')) url = `${API_URL}/data/messages`;
+      else if (path.includes('groups')) url = `${API_URL}/data/groups`;
+      else if (path.includes('meetings')) url = `${API_URL}/data/meetings`;
+      else if (path.includes('calls')) url = `${API_URL}/data/calls`;
+      else if (path.includes('invites')) url = `${API_URL}/data/invites`;
 
       if (!url) return;
 
       const res = await fetch(`${url}?t=${Date.now()}`);
       if (res.ok) {
-        const data = await res.json();
-        
+        const text = await res.text();
+        if (text === lastHash) return;
+        lastHash = text;
+
+        const data = JSON.parse(text);
         let mappedDocs = [];
+        
         if (isUser) {
           mappedDocs = data.map(d => ({
             id: d.id,
             ...d,
             data: () => ({ 
+              id: d.id,
+              username: d.username,
+              email: d.email,
+              displayName: d.displayName,
               name: d.displayName || d.username, 
               role: d.role, 
               isOnline: d.online, 
-              avatarUrl: d.avatarUrl,
+              avatarUrl: d.avatarUrl, 
               bio: d.bio,
-              status: d.status || (d.online ? 'online' : 'offline')
+              status: d.status || (d.online ? 'online' : 'offline'),
+              readTimestamps: d.readTimestamps,
+              activeDMs: d.activeDMs
             })
           }));
         } else {
-          mappedDocs = data.map(d => ({
-            id: JSON.parse(d.jsonData).id || d.id,
-            data: () => JSON.parse(d.jsonData)
-          }));
+          mappedDocs = data.map(d => {
+            const parsed = JSON.parse(d.jsonData);
+            return {
+              id: parsed.id || d.id,
+              data: () => parsed
+            };
+          });
         }
         
         callback({ docs: mappedDocs });
       }
-    } catch (e) {
-      // Silence errors in polling
-    }
+    } catch (e) {}
   };
 
   fetchPath();
-  interval = setInterval(fetchPath, 500);
+  interval = setInterval(fetchPath, 350);
   
   return () => clearInterval(interval);
 };
@@ -146,6 +151,13 @@ export const saveDocument = async (path, data, options = {}) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`API Error (${response.status}):`, errorText);
+        return null;
+      }
+      
       return await response.json();
     } catch (err) {
       console.error('API Error (saveDocument users):', err);

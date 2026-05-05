@@ -32,10 +32,31 @@ export const AuthProvider = ({ children }) => {
     }
 
     // Ao logar, já definimos um perfil básico baseado no que recebemos do login
+    const parseResilient = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val !== 'string') return [];
+      try {
+        return JSON.parse(val);
+      } catch (e) {
+        // Tenta limpar colchetes e dividir por vírgula se for formato [uuid, uuid] sem aspas
+        if (val.startsWith('[') && val.endsWith(']')) {
+          return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+        }
+        return [];
+      }
+    };
+    const parsedDMs = parseResilient(user.activeDMs);
+
     setCurrentUserProfile({
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
       name: user.displayName || user.username,
       avatarUrl: user.avatarUrl,
-      status: user.status || 'online'
+      status: user.status || 'online',
+      readTimestamps: user.readTimestamps,
+      activeDMs: Array.isArray(parsedDMs) ? parsedDMs : []
     });
 
     const markOnline = async () => {

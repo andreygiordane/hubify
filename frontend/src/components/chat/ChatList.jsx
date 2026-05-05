@@ -1,18 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
   MessageCircle, 
   Hash,
   ShieldCheck,
-  MoreVertical,
+  MoreHorizontal,
   MessageSquare,
   Users as UsersIcon,
   X,
   ChevronLeft,
   BellOff,
-  Edit
+  Edit,
+  Trash2,
+  Info,
+  Bell
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function ChatList({ 
   chatRooms, 
@@ -29,10 +33,21 @@ export default function ChatList({
   setSelectedChatMobile,
   groupInvites,
   onViewInvitations,
-  mutedRooms
+  mutedRooms,
+  handleDeleteRoom,
+  setShowChatInfo,
+  toggleMuteRoom,
+  setRoomToDelete
 }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeMenuData, setActiveMenuData] = useState(null); // { roomId, rect, room }
+
+  const handleOpenMenu = (roomId, rect, room) => {
+    setActiveMenuData({ roomId, rect, room });
+  };
+
+  const closeMenu = () => setActiveMenuData(null);
 
   const getInitials = (name) => {
     if (!name) return '?';
@@ -101,7 +116,8 @@ export default function ChatList({
           )}
         </div>
 
-        {groupInvites?.filter(i => i.toId === user?.id).length > 0 && (
+        {/* Banner de convites restaurado conforme solicitado */}
+        {groupInvites?.filter(i => i.toId === user?.id && i.status === 'pending').length > 0 && (
           <div 
             onClick={onViewInvitations}
             className="mt-6 p-4 bg-indigo-600 rounded-2xl cursor-pointer hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 animate-in slide-in-from-top-2 duration-300"
@@ -112,7 +128,7 @@ export default function ChatList({
               </div>
               <div className="flex-1">
                 <p className="text-xs font-bold text-white uppercase tracking-wider">Novos Convites</p>
-                <p className="text-sm text-indigo-100">Você tem {groupInvites.filter(i => i.toId === user?.id).length} convite(s) pendente(s)</p>
+                <p className="text-sm text-indigo-100">Você tem {groupInvites.filter(i => i.toId === user?.id && i.status === 'pending').length} convite(s) pendente(s)</p>
               </div>
               <ChevronLeft className="w-5 h-5 text-white rotate-180" />
             </div>
@@ -134,73 +150,26 @@ export default function ChatList({
              )}
           </div>
         ) : (
-          filteredRooms.map((room) => {
-            const lastMsg = allMessages.filter(m => m.roomId === room.id).slice(-1)[0];
-            const unreadCount = allMessages.filter(m => m.roomId === room.id && m.senderId !== user?.id && m.timestamp > (readTimestamps[room.id] || 0)).length;
-            const isActive = activeRoomId === room.id;
-
-            return (
-              <div
+          filteredRooms.map((room) => (
+              <ChatRoomItem 
                 key={room.id}
-                onClick={() => { setActiveRoomId(room.id); setSelectedChatMobile(room); }}
-                className={`group flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all duration-300 relative ${
-                  isActive 
-                    ? 'bg-indigo-50/80 shadow-sm ring-1 ring-indigo-100' 
-                    : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="relative shrink-0">
-                  <div className={`w-14 h-14 rounded-2xl overflow-hidden shadow-sm transition-transform duration-500 ${isActive ? 'scale-105' : 'group-hover:scale-105'}`}>
-                    {room.isGroup ? (
-                      <div className="w-full h-full bg-gradient-to-tr from-indigo-500 to-purple-400 flex items-center justify-center text-white font-bold text-lg shadow-inner">
-                        {getInitials(room.name)}
-                      </div>
-                    ) : (
-                      <img 
-                        src={room.avatarUrl} 
-                        alt={room.name} 
-                        className="w-full h-full object-cover" 
-                      />
-                    )}
-                  </div>
-
-                  {!room.isGroup && (
-                    <div className={`absolute -bottom-1 -right-1 w-4 h-4 border-2 border-white rounded-full ${(statusConfig || {})[room.status || (room.isOnline ? 'online' : 'offline')]?.color || 'bg-gray-500'}`}></div>
-                  )}
-                  {room.isGroup && (
-                    <div className="absolute -bottom-1 -right-1 bg-white p-1 rounded-lg shadow-sm">
-                      <Hash className="w-2.5 h-2.5 text-indigo-500 stroke-[3]" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-hidden">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <h3 className={`text-sm font-bold truncate flex items-center gap-1.5 ${isActive ? 'text-indigo-900' : 'text-gray-900'}`}>
-                      {room.name}
-                      {mutedRooms?.includes(room.id) && <BellOff className="w-3 h-3 text-gray-400" />}
-                    </h3>
-                    <span className="text-[10px] text-gray-400 font-medium">
-                      {lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className={`text-xs truncate flex items-center gap-1 ${isActive ? 'text-indigo-600 font-medium' : unreadCount > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
-                      {lastMsg ? (lastMsg.senderId === user?.id ? 'Você: ' : '') + lastMsg.text : 'Sem mensagens'}
-                      {lastMsg?.isEdited && <Edit size={10} className="shrink-0 opacity-60" />}
-                    </p>
-                    {unreadCount > 0 && (
-                      <span className="bg-indigo-600 text-white text-[10px] font-black min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5 shadow-lg shadow-indigo-100 animate-in zoom-in duration-300">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                
-                {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-600 rounded-r-full shadow-[2px_0_10px_rgba(79,70,229,0.4)]"></div>}
-              </div>
-            );
-          })
+                room={room}
+                user={user}
+                allMessages={allMessages}
+                readTimestamps={readTimestamps}
+                activeRoomId={activeRoomId}
+                setActiveRoomId={setActiveRoomId}
+                setSelectedChatMobile={setSelectedChatMobile}
+                statusConfig={statusConfig}
+                mutedRooms={mutedRooms}
+                handleDeleteRoom={handleDeleteRoom}
+                setShowChatInfo={setShowChatInfo}
+                toggleMuteRoom={toggleMuteRoom}
+                getInitials={getInitials}
+                onOpenMenu={handleOpenMenu}
+                setRoomToDelete={setRoomToDelete}
+              />
+          ))
         )}
       </div>
 
@@ -212,6 +181,208 @@ export default function ChatList({
             <Plus className="w-4 h-4 text-indigo-600" /> Nova Conversa Direta
          </button>
       </div>
+
+      {/* GLOBAL POPOVER MENU (THOUGHT CLOUD) */}
+      <AnimatePresence>
+        {activeMenuData && (() => {
+          const menuHeight = 180;
+          const isAtTop = activeMenuData.rect.top < 200;
+          const topPos = isAtTop ? activeMenuData.rect.bottom + 10 : activeMenuData.rect.top - menuHeight - 10;
+          
+          return (
+            <>
+              {/* Backdrop */}
+              <div 
+                className="fixed inset-0 z-[1000] bg-black/5" 
+                onClick={closeMenu}
+              />
+              
+              {/* Menu Container */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: isAtTop ? -10 : 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: isAtTop ? -10 : 10 }}
+                style={{
+                  position: 'fixed',
+                  top: topPos,
+                  left: activeMenuData.rect.left - 180,
+                  width: '220px',
+                  zIndex: 1001,
+                }}
+                className="bg-white border border-gray-100 rounded-[2rem] py-2 shadow-2xl"
+              >
+                <div className="flex flex-col">
+                  <button 
+                    onClick={() => { toggleMuteRoom(activeMenuData.roomId); closeMenu(); }}
+                    className="w-full px-5 py-4 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors rounded-t-[2rem]"
+                  >
+                    {mutedRooms?.includes(activeMenuData.roomId) ? <Bell size={16} className="text-green-600" /> : <BellOff size={16} className="text-gray-400" />}
+                    {mutedRooms?.includes(activeMenuData.roomId) ? 'Ativar notificações' : 'Silenciar notificações'}
+                  </button>
+                  <button 
+                    onClick={() => { setActiveRoomId(activeMenuData.roomId); setSelectedChatMobile(activeMenuData.room); setShowChatInfo(true); closeMenu(); }}
+                    className="w-full px-5 py-4 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors border-t border-gray-50"
+                  >
+                    <Info size={16} className="text-indigo-600" /> Informações
+                  </button>
+                  <button 
+                    onClick={() => { setRoomToDelete(activeMenuData.room); closeMenu(); }}
+                    className="w-full px-5 py-4 text-left text-xs font-bold text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-50 rounded-b-[2rem]"
+                  >
+                    <Trash2 size={16} /> {activeMenuData.room.isGroup ? 'Sair do grupo' : 'Excluir conversa'}
+                  </button>
+                </div>
+
+                {/* Thought Cloud Arrow */}
+                <div 
+                  className={`absolute ${isAtTop ? '-top-2 border-l border-t' : '-bottom-2 border-r border-b'} right-8 w-4 h-4 bg-white border-gray-100 rotate-45`}
+                  style={{ zIndex: -1 }}
+                />
+              </motion.div>
+            </>
+          );
+        })()}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function ChatRoomItem({ 
+  room, user, allMessages, readTimestamps, activeRoomId, setActiveRoomId, 
+  setSelectedChatMobile, statusConfig, mutedRooms, handleDeleteRoom, setShowChatInfo, toggleMuteRoom, getInitials,
+  onOpenMenu, setRoomToDelete 
+}) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const lastMsg = room ? allMessages.filter(m => m.roomId === room.id).slice(-1)[0] : null;
+  const unreadCount = room ? allMessages.filter(m => m.roomId === room.id && m.senderId !== user?.id && m.timestamp > (readTimestamps[room.id] || 0)).length : 0;
+  const isActive = room && activeRoomId === room.id;
+
+  if (!room) return null;
+
+  return (
+    <div className="relative group">
+      {/* Mobile Swipe Actions (Behind the card) */}
+      <div className="absolute inset-0 overflow-hidden rounded-2xl md:hidden pointer-events-none">
+         <div className="flex w-[140px] h-full ml-auto pointer-events-auto">
+             <div className="relative flex-1 flex items-stretch">
+               <button 
+                 onClick={(e) => { 
+                    e.stopPropagation(); 
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    onOpenMenu(room.id, rect, room);
+                 }}
+                 className="flex-1 bg-[#007AFF] flex items-center justify-center text-white"
+               >
+                 <MoreHorizontal size={24} />
+               </button>
+             </div>
+           <button 
+             onClick={(e) => { e.stopPropagation(); setRoomToDelete(room); }}
+             className="flex-1 bg-[#FF3B30] flex items-center justify-center text-white"
+           >
+             <Trash2 size={24} />
+           </button>
+         </div>
+      </div>
+
+      <motion.div
+        drag={isMobile ? "x" : false}
+        dragConstraints={{ left: -140, right: 0 }}
+        dragElastic={0.05}
+        dragDirectionLock
+        dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
+        whileTap={isMobile ? { cursor: "grabbing" } : {}}
+        onClick={(e) => { 
+          setActiveRoomId(room.id); 
+          setSelectedChatMobile(room); 
+        }}
+        className={`relative z-10 flex items-center gap-3 p-2.5 rounded-2xl cursor-pointer transition-colors duration-200 will-change-transform ${
+          isActive 
+            ? 'bg-indigo-50/90 shadow-sm ring-1 ring-indigo-100' 
+            : 'bg-white hover:bg-gray-50'
+        }`}
+        style={{ touchAction: 'pan-y' }}
+      >
+        <div className="relative shrink-0">
+          <div className={`w-12 h-12 rounded-2xl overflow-hidden shadow-sm transition-transform duration-500 ${isActive ? 'scale-105' : 'group-hover:scale-105'}`}>
+            {room.isGroup ? (
+              room.avatarUrl ? (
+                <img src={room.avatarUrl} alt={room.name} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-tr from-indigo-500 to-purple-400 flex items-center justify-center text-white font-bold text-lg shadow-inner">
+                  {getInitials(room.name)}
+                </div>
+              )
+            ) : (
+              <img 
+                src={room.avatarUrl} 
+                alt={room.name} 
+                className="w-full h-full object-cover" 
+              />
+            )}
+          </div>
+
+          {!room.isGroup && (
+            <div className={`absolute -bottom-1 -right-1 w-4 h-4 border-2 border-white rounded-full ${(statusConfig || {})[room.status || (room.isOnline ? 'online' : 'offline')]?.color || 'bg-gray-500'}`}></div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          <div className="flex justify-between items-baseline mb-0.5">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h3 className={`text-sm font-bold truncate ${isActive ? 'text-indigo-900' : 'text-gray-900'}`}>
+                {room.name}
+              </h3>
+              {room.isGroup && (
+                <span className="shrink-0 px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[8px] font-black rounded-md uppercase tracking-wider">
+                  Grupo
+                </span>
+              )}
+              {mutedRooms?.includes(room.id) && <BellOff className="w-3 h-3 text-gray-400 shrink-0" />}
+            </div>
+            <span className="text-[10px] text-gray-400 font-medium shrink-0">
+              {lastMsg ? new Date(lastMsg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
+            </span>
+          </div>
+          <div className="flex justify-between items-center">
+            <p className={`text-[11px] truncate flex-1 flex items-center gap-1 ${isActive ? 'text-indigo-600 font-medium' : unreadCount > 0 ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
+              {lastMsg ? (lastMsg.senderId === user?.id ? 'Você: ' : '') + lastMsg.text : 'Sem mensagens'}
+              {lastMsg?.isEdited && <Edit size={10} className="shrink-0 opacity-60" />}
+            </p>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <span className="bg-indigo-600 text-white text-[9px] font-black min-w-[18px] h-4.5 rounded-full flex items-center justify-center px-1.5 shadow-lg shadow-indigo-100">
+                  {unreadCount}
+                </span>
+              )}
+              
+              {/* Desktop More Menu (hidden on mobile swipe) */}
+              <div className="relative hidden md:block">
+                 <button 
+                   onClick={(e) => { 
+                      e.stopPropagation(); 
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      onOpenMenu(room.id, rect, room);
+                   }}
+                   className="p-1.5 text-gray-300 hover:text-indigo-600 hover:bg-white rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                 >
+                  <MoreHorizontal size={16} />
+                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-indigo-600 rounded-r-full shadow-[2px_0_10px_rgba(79,70,229,0.4)]"></div>}
+      </motion.div>
     </div>
   );
 }

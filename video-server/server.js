@@ -13,7 +13,12 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling']
+});
+
+io.engine.on("connection_error", (err) => {
+  console.log(`[!] Connection Error:`, err.req ? `Request to ${err.req.url}` : 'No request', `| Code: ${err.code} | Message: ${err.message}`);
 });
 
 // State
@@ -78,6 +83,11 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('receive-chat', message);
   });
 
+  socket.on('message-created', (message) => {
+    if (!message || !message.roomId) return;
+    socket.broadcast.emit('message-created', message);
+  });
+
   // Novos eventos de Sinalização WebRTC (Padrão Simple-Peer / Classe Peer)
   socket.on("sending-signal", payload => {
     io.to(payload.userToSignal).emit('user-joined', { signal: payload.signal, callerID: payload.callerID });
@@ -123,6 +133,27 @@ io.on('connection', (socket) => {
 
   socket.on('stop-typing', ({ roomId, userId }) => {
     socket.to(roomId).emit('user-stop-typing', { userId });
+  });
+
+  socket.on('messages-read', ({ roomId, userId, timestamp }) => {
+    console.log(`[READ] User ${userId} marked room ${roomId} as read at ${new Date(timestamp).toISOString()}`);
+    socket.to(roomId).emit('user-read-messages', { userId, roomId, timestamp });
+  });
+
+  socket.on('profile-update', ({ userId, data }) => {
+    socket.broadcast.emit('profile-update', { userId, data });
+  });
+
+  socket.on('conversation-deleted', ({ roomId, deletedBy, deletedAt }) => {
+    if (!roomId) return;
+    if (roomId.startsWith('group_')) {
+      socket.broadcast.emit('conversation-deleted', { roomId, deletedBy, deletedAt });
+    }
+  });
+
+  socket.on('message-deleted', ({ messageId, roomId, deletedBy, deletedAt }) => {
+    if (!messageId) return;
+    socket.broadcast.emit('message-deleted', { messageId, roomId, deletedBy, deletedAt });
   });
 
   socket.on('disconnect', async () => {

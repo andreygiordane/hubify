@@ -29,7 +29,7 @@ export default function Meetings() {
 
   // --- TELA INICIAL (DASHBOARD RESPONSIVO) ---
   return (
-    <div className="flex flex-col min-h-screen bg-white text-[#1a1c21] font-sans w-full overflow-hidden">
+    <div className="flex flex-col h-full bg-white text-[#1a1c21] font-sans w-full overflow-hidden">
       
       {/* HEADER SUPERIOR */}
       <header className="h-16 bg-white border-b border-slate-100 px-4 md:px-10 flex items-center justify-between sticky top-0 z-20 shrink-0">

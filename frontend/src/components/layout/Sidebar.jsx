@@ -58,7 +58,7 @@ export default function Sidebar() {
             >
               <div className="relative shrink-0">
                 <img 
-                  src={currentUserProfile?.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+                  src={currentUserProfile?.avatarUrl || "/images/default-avatar.png"} 
                   alt="Avatar" 
                   className="w-10 h-10 rounded-xl bg-slate-700 object-cover" 
                 />
@@ -121,7 +121,7 @@ export default function Sidebar() {
           >
             <div className="relative">
               <img 
-                src={currentUserProfile?.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+                src={currentUserProfile?.avatarUrl || "/images/default-avatar.png"} 
                 alt="Avatar" 
                 className="w-7 h-7 rounded-lg bg-slate-700 object-cover" 
               />

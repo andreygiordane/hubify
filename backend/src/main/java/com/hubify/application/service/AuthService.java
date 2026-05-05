@@ -35,7 +35,7 @@ public class AuthService {
         user.setOnline(true);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         if (user.getAvatarUrl() == null || user.getAvatarUrl().isEmpty()) {
-            user.setAvatarUrl("https://api.dicebear.com/7.x/avataaars/svg?seed=" + user.getUsername());
+            user.setAvatarUrl("/images/default-avatar.png");
         }
         User savedUser = userRepository.save(user);
         return convertToDTO(savedUser);

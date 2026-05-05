@@ -24,24 +24,57 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const peersRef = useRef([]);
   const [invitedUserIds, setInvitedUserIds] = useState(new Set());
+  const localStreamRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(t => t + 1), 1000);
     return () => {
       clearInterval(timer);
       peersRef.current.forEach(p => p.peer.destroy());
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (cameraStream && cameraStream !== localStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
+      if (cameraStreamRef.current && cameraStreamRef.current !== localStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+      if (socket) {
+        socket.off('room-participants');
+        socket.off('receive-chat');
+        socket.off('call-ended');
+        socket.off('user-joined-room');
+        socket.off('all-users');
+        socket.off('user-joined');
+        socket.off('receiving-returned-signal');
+        socket.off('user-disconnected');
       }
     };
-  }, [localStream, cameraStream]);
+  }, []);
 
   useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
+
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
+
+  useEffect(() => {
+    console.log(`[Componente] useCallLogic montado para sala: ${roomId}`);
     if (socket && roomId && !hasConnected) {
-      initMedia();
+      // Adicionar um pequeno delay para garantir que o socket.join no servidor terminou
+      const timer = setTimeout(() => {
+        initMedia();
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [socket, roomId]);
 
@@ -68,16 +101,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       setCameraStream(stream);
 
       if (socket) {
-        socket.emit("join-room", {
-          roomId,
-          uid: currentUser.uid,
-          name: currentUser.name,
-          avatarUrl: currentUser.avatarUrl
-        });
-
         socket.on('room-participants', updated => {
           setRoomParticipants(updated);
-          // Prune streams for users who stopped sharing screen
           setStreams(prev => {
             const next = { ...prev };
             let changed = false;
@@ -113,26 +138,25 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
         socket.on("all-users", users => {
           users.forEach(id => {
+            // EVITAR DUPLICADOS
+            if (peersRef.current.find(p => p.peerID === id)) return;
+
             const peer = createPeer(id, socket.id, stream);
             peer.on("stream", s => {
-              s.getTracks().forEach(t => {
-                t.onended = () => {
-                  setStreams(prev => {
-                    const current = prev[id] || {};
-                    if (current.screen && current.screen.id === s.id) {
-                      return { ...prev, [id]: { ...current, screen: null } };
-                    }
-                    return prev;
-                  });
-                };
-              });
-
+              console.log(`[WebRTC] Stream received from ${id}:`, s.id, "Tracks:", s.getTracks().map(t => t.kind));
               setStreams(prev => {
                 const current = prev[id] || {};
+                const currentHasVideo = current.webcam?.getVideoTracks().length > 0;
+                const newHasVideo = s.getVideoTracks().length > 0;
+
+                if (!current.webcam || (!currentHasVideo && newHasVideo)) {
+                  return { ...prev, [id]: { ...current, webcam: s } };
+                }
+
                 if (current.webcam && current.webcam.id !== s.id) {
                   return { ...prev, [id]: { ...current, screen: s } };
                 }
-                return { ...prev, [id]: { ...current, webcam: s } };
+                return prev;
               });
             });
             peersRef.current.push({ peerID: id, peer });
@@ -146,25 +170,21 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
           } else {
             const peer = addPeer(payload.signal, payload.callerID, stream);
             peer.on("stream", s => {
-              s.getTracks().forEach(t => {
-                t.onended = () => {
-                  setStreams(prev => {
-                    const peerID = payload.callerID;
-                    const current = prev[peerID] || {};
-                    if (current.screen && current.screen.id === s.id) {
-                      return { ...prev, [peerID]: { ...current, screen: null } };
-                    }
-                    return prev;
-                  });
-                };
-              });
-
+              const peerID = payload.callerID;
+              console.log(`[WebRTC] Stream received from ${peerID}:`, s.id, "Tracks:", s.getTracks().map(t => t.kind));
               setStreams(prev => {
-                const current = prev[payload.callerID] || {};
-                if (current.webcam && current.webcam.id !== s.id) {
-                  return { ...prev, [payload.callerID]: { ...current, screen: s } };
+                const current = prev[peerID] || {};
+                const currentHasVideo = current.webcam?.getVideoTracks().length > 0;
+                const newHasVideo = s.getVideoTracks().length > 0;
+
+                if (!current.webcam || (!currentHasVideo && newHasVideo)) {
+                  return { ...prev, [peerID]: { ...current, webcam: s } };
                 }
-                return { ...prev, [payload.callerID]: { ...current, webcam: s } };
+
+                if (current.webcam && current.webcam.id !== s.id) {
+                  return { ...prev, [peerID]: { ...current, screen: s } };
+                }
+                return prev;
               });
             });
             peersRef.current.push({ peerID: payload.callerID, peer });
@@ -201,19 +221,40 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
             return next;
           });
         });
+
+        socket.emit("join-room", {
+          roomId,
+          uid: currentUser.uid,
+          name: currentUser.name,
+          avatarUrl: currentUser.avatarUrl
+        });
       }
     } catch (err) { console.error(err); }
   };
 
   const createPeer = (userToSignal, callerID, stream) => {
-    const peer = new Peer({ initiator: true, trickle: true, stream });
-    peer.on("signal", signal => socket.emit("sending-signal", { userToSignal, callerID, signal }));
+    console.log(`[WebRTC] Inciando oferta (Offer) para: ${userToSignal}`);
+    const peer = new Peer({ initiator: true, stream });
+    peer.on("signal", signal => {
+      console.log(`[WebRTC] Sinal de oferta gerado para ${userToSignal}`);
+      try {
+        console.log(`[WebRTC] Offer signal details: type=${signal.type || 'n/a'} sdpLen=${signal.sdp ? signal.sdp.length : 0} hasCandidate=${'candidate' in signal}`);
+      } catch (e) {}
+      socket.emit("sending-signal", { userToSignal, callerID, signal });
+    });
     return peer;
   };
 
   const addPeer = (incomingSignal, callerID, stream) => {
-    const peer = new Peer({ initiator: false, trickle: true, stream });
-    peer.on("signal", signal => socket.emit("returning-signal", { signal, callerID }));
+    console.log(`[WebRTC] Recebida oferta de ${callerID}. Gerando resposta (Answer)...`);
+    const peer = new Peer({ initiator: false, stream });
+    peer.on("signal", signal => {
+      console.log(`[WebRTC] Sinal de resposta gerado para ${callerID}`);
+      try {
+        console.log(`[WebRTC] Answer signal details: type=${signal.type || 'n/a'} sdpLen=${signal.sdp ? signal.sdp.length : 0} hasCandidate=${'candidate' in signal}`);
+      } catch (e) {}
+      socket.emit("returning-signal", { signal, callerID });
+    });
     peer.signal(incomingSignal);
     return peer;
   };

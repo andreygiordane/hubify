@@ -1,82 +1,59 @@
-# Hubify - Plataforma de Comunicação Corporativa v4.0.0
+# Hubify - Plataforma Unificada de Comunicacao Corporativa
 
-![Hubify Logo](https://api.dicebear.com/7.x/initials/svg?seed=Hubify&backgroundColor=2563eb&fontFamily=Outfit&fontWeight=800)
+Hubify e uma solucao integrada de comunicacao em tempo real, desenvolvida para fornecer um ambiente de colaboracao seguro e escalavel. A arquitetura da plataforma e dividida em servicos especializados, garantindo alta disponibilidade para troca de mensagens e videoconferencias.
 
-O **Hubify** é uma solução completa de comunicação empresarial, projetada para oferecer uma experiência de colaboração premium, segura e de altíssima performance. Integrando mensageria em tempo real e videoconferência HD, o Hubify v4.0.0 redefine a produtividade remota com uma interface state-of-the-art.
+## Arquitetura do Sistema
 
----
+A plataforma e composta por tres modulos principais:
 
-## 🚀 Novidades da Versão 4.0.0 (The Stream Update)
+1. **Backend (Java/Spring Boot)**: Gerenciamento de persistencia de dados, autenticacao e logica de negocios. Utiliza uma camada de repositorio de documentos flexivel para armazenamento de metadados e configuracoes.
+2. **Video Server (Node.js/Socket.io)**: Servidor de sinalizacao WebRTC dedicado. Gerencia o handshake entre pares e o roteamento de eventos de sinalizacao para chamadas de audio e video.
+3. **Frontend (React)**: Interface de usuario baseada em componentes reativos, focada em performance e experiencia do usuario.
 
-Esta é a atualização mais significativa até o momento, focada em produtividade visual e estabilidade de infraestrutura.
+## Funcionalidades Tecnicas
 
-### 🎥 Revolução no Vídeo & Compartilhamento
-- **Multi-Stream Simultâneo**: Agora você pode compartilhar sua tela e manter sua webcam ativa ao mesmo tempo. O sistema trata cada fluxo como um participante separado na grade.
-- **Spotlight Automático**: A interface prioriza automaticamente o conteúdo compartilhado, destacando-o no centro para todos os participantes.
-- **Indicadores de Transmissão**: Selos pulsantes "Transmitindo" nas webcams dos apresentadores para identificação imediata.
-- **Design de Cápsula**: Interface de controles e tiles de vídeo com estética moderna, bordas arredondadas e transparências (Glassmorphism).
+### Engine de Mensageria
+- Implementacao de sistema de sincronizacao via polling otimizado com cache local.
+- Gerenciamento de estado otimista (Optimistic Updates) para operacoes de exclusao e envio de mensagens, reduzindo a latencia percebida pelo usuario.
+- Filtragem de autorizacao de documentos via backend para garantir a privacidade de grupos e conversas diretas.
 
-### 📱 Experiência Mobile Inteligente
-- **Grid Prioritário**: No mobile, ao haver uma transmissão de tela, ela ocupa o topo com destaque, enquanto os outros participantes são organizados em uma lista horizontal deslizante.
-- **Ajuste de Proporção (Fit-to-Screen)**: Transmissões de tela agora usam o modo de ajuste completo, garantindo que nenhum detalhe do conteúdo seja cortado.
-- **Otimização de Espaço**: Remoção de janelas flutuantes redundantes para uma interface mais limpa e focada.
+### Infraestrutura de Video e WebRTC
+- Handshake peer-to-peer utilizando Simple-Peer para estabelecimento de conexoes.
+- Gerenciamento dinâmico de tracks de midia (audio/video) com suporte a reconexao automatica em caso de instabilidade de rede.
+- Interface adaptativa para dispositivos moveis com controle de viewport e gestos.
 
-### 🛠 Estabilidade e Engenharia de Dados
-- **Prevenção de Telas Fantasmas**: Sincronização via Socket que força a limpeza de transmissões encerradas, garantindo que o grid esteja sempre atualizado.
-- **Parsing Resiliente**: Novo motor de processamento de dados que recupera automaticamente registros de DMs e contatos, mesmo em casos de corrupção de JSON no banco de dados.
-- **Renegociação WebRTC Nativa**: Implementação de lógica de add/remove stream customizada para maior estabilidade em conexões P2P.
+### Customizacao e Estetica
+- Sistema de patterns SVG injetados dinamicamente para personalizacao de backgrounds de chat sem impacto na performance de renderizacao.
+- Persistencia de preferencias de interface via LocalStorage e sincronizacao opcional com o perfil do usuario no backend.
 
----
+## Requisitos de Ambiente
 
-## 🛠 Arquitetura & Tecnologias
+- Docker Desktop (com Docker Compose)
+- Java 17+ (para desenvolvimento local do backend)
+- Node.js 18+ (para desenvolvimento local do frontend/video-server)
 
-O Hubify utiliza uma stack moderna e distribuída para garantir escalabilidade:
+## Execucao e Deploy
 
-### 🎨 Frontend (React Ecosystem)
-- **React 18 + Vite**: Performance de renderização e build extremamente rápidas.
-- **Tailwind CSS**: Estilização baseada em tokens de design.
-- **Framer Motion**: Animações de interface e transições de grid.
-- **Lucide Icons**: Iconografia minimalista e consistente.
-- **Socket.io-client**: Comunicação de eventos e chat em tempo real.
-
-### ⚙️ Backend (Enterprise Java)
-- **Java 25 + Spring Boot 3**: O que há de mais moderno na JVM para serviços robustos.
-- **Spring Security + BCrypt**: Camada de proteção rigorosa para dados de usuários.
-- **Spring Data JPA + PostgreSQL**: Persistência relacional otimizada para alto volume de dados.
-
-### 📡 Video & Signaling (Real-time)
-- **Node.js**: Servidor de sinalização leve e eficiente.
-- **Native WebRTC Wrapper**: Camada personalizada para gestão de conexões Peer-to-Peer sem dependências pesadas.
-
----
-
-## 📂 Estrutura do Ecossistema
-
-```bash
-├── backend/            # Microserviço de Regras de Negócio e API (Java 25)
-├── frontend/           # Interface do Usuário (React + Vite)
-├── video-server/       # Orquestrador de Sinalização WebRTC (Node.js)
-├── docker-compose.yml  # Orquestração em Containers para Produção
-└── README.md           # Documentação técnica v4.0.0
+### Ambiente de Desenvolvimento
+Para iniciar todos os servicos em containers Docker locais:
+```powershell
+./hubify-local.ps1
 ```
 
----
+### Deploy em Producao
+O deploy e automatizado para o Google Cloud Platform (GCP), utilizando Google Cloud Run para os servicos e Google Cloud SQL para a persistencia:
+```powershell
+./hubify-deploy.ps1
+```
 
-## 📦 Inicialização Rápida
+## Notas de Versao v4.5.0
 
-1. Certifique-se de ter o **Docker** e **Docker Compose** instalados.
-2. No diretório raiz, execute:
-   ```bash
-   docker-compose up -d --build
-   ```
-3. O Hubify estará disponível em `http://localhost:5173`.
+- Implementacao de wallpapers geometricos baseados em SVG.
+- Otimizacao do fluxo de exclusao de salas com reducao de flickering via processamento de delecao local.
+- Restauracao do banner de convites de grupo na barra lateral para melhor visibilidade.
+- Correcao de bug de reinicializacao de camera em chamadas via dispositivos moveis.
 
----
-
-## 👤 Desenvolvedor
-**Andrey Giordane**
-Email: [andreycostaa@gmail.com](mailto:andreycostaa@gmail.com)
-GitHub: [@andreygiordane](https://github.com/andreygiordane)
-
----
-Hubify v4.0.0 - Elevando o padrão da comunicação corporativa.
+## Desenvolvedor
+Andrey Giordane
+GitHub: https://github.com/andreygiordane
+Email: andreycostaa@gmail.com

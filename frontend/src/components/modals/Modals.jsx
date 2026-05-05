@@ -9,44 +9,49 @@ import {
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
 
-// Componentes Auxiliares para Interface de Chamada (Baseados no novo visual)
-const ActionButton = ({ icon, label, color, onClick, className = "" }) => (
-  <div className={`flex flex-col items-center gap-2 ${className}`}>
-    <button
-      onClick={onClick}
-      className={`w-16 h-16 rounded-full flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 shadow-lg ${color}`}
-    >
-      {icon}
-    </button>
-    <span className="text-[10px] font-bold uppercase tracking-widest text-gray-300">{label}</span>
+// Componentes de Interface de Chamada (Novo Design Premium)
+const PageWrapper = ({ children }) => (
+  <div className="fixed inset-0 z-[600] bg-slate-950 text-white font-sans flex items-center justify-center overflow-hidden animate-in fade-in duration-500">
+    <div className="absolute top-[-10%] left-[-10%] w-[70%] h-[70%] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse"></div>
+    <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-purple-600/5 rounded-full blur-[100px]"></div>
+    <div className="relative z-10 w-full max-w-lg h-full flex flex-col items-center py-12 md:py-20 px-8">
+      {children}
+    </div>
   </div>
 );
 
-const CallAvatar = ({ src, name = "?" }) => {
-  const getInitials = (n) => n.split(' ').map(x => x[0]).join('').toUpperCase().slice(0, 2);
-  
-  return (
-    <div className="relative">
-      <div className="absolute inset-0 bg-white/20 rounded-full animate-ping opacity-20 scale-125"></div>
+const ContactAvatar = ({ src, name = "U" }) => (
+  <div className="relative mb-8 md:mb-10">
+    <div className="relative flex items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/80 to-purple-600/80 text-white font-bold shadow-2xl backdrop-blur-md border border-white/10 w-44 h-44 md:w-52 md:h-52 text-5xl md:text-6xl select-none transition-all overflow-hidden">
       {src ? (
-        <img
-          src={src}
-          alt="avatar"
-          className="w-32 h-32 rounded-full border-4 border-white/10 object-cover shadow-2xl relative z-10"
-        />
+        <img src={src} alt={name} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-32 h-32 rounded-full border-4 border-white/10 bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white text-4xl font-bold shadow-2xl relative z-10">
-          {getInitials(name)}
-        </div>
+        name.charAt(0).toUpperCase()
       )}
+      <div className="absolute -inset-4 rounded-full border border-indigo-400/20 animate-[ping_3s_linear_infinite] opacity-40"></div>
+      <div className="absolute -inset-8 rounded-full border border-white/5 animate-[ping_4s_linear_infinite] opacity-20"></div>
     </div>
-  );
-};
+  </div>
+);
+
+const ActionButton = ({ icon: Icon, label, colorClass, onClick, bounce = false }) => (
+  <button
+    onClick={onClick}
+    className="group flex flex-col items-center gap-3 transition-all"
+  >
+    <div className={`w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-full text-white shadow-xl transition-all hover:scale-110 active:scale-90 ${colorClass} ${bounce ? 'animate-bounce' : ''}`}>
+      {React.isValidElement(Icon) ? Icon : <Icon size={32} />}
+    </div>
+    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 group-hover:text-white transition-colors">
+      {label}
+    </span>
+  </button>
+);
 
 // Chamada Recebida / Discando
 const CallInterface = ({ 
   incomingCall, isOutgoingCall, outgoingTarget, 
-  onAccept, onDecline, onCancel, callType, setCallType 
+  onAccept, onDecline, onCancel, callType
 }) => {
   const incomingAudioRef = useRef(new Audio('/audio/toque_chamada_recebida.mp3'));
   const outgoingAudioRef = useRef(new Audio('/audio/toque_chamando.mp3'));
@@ -72,104 +77,66 @@ const CallInterface = ({
   // TELA: DISCANDE (OUTGOING)
   if (isOutgoingCall && outgoingTarget) {
     const isVideo = callType === 'video';
-    
-    if (isVideo) {
-      return (
-        <div className="fixed inset-0 z-[600] bg-black text-white overflow-hidden animate-in fade-in duration-500">
-          <div className="absolute inset-0 opacity-40">
-             <div className="w-full h-full bg-gradient-to-b from-transparent via-slate-900/50 to-black"></div>
-             {/* Aqui poderia haver um preview da câmera local se desejado futuramente */}
-          </div>
-          
-          <div className="relative z-10 h-full flex flex-col justify-between items-center p-12">
-            <div className="text-center mt-12 space-y-4">
-              <div className="flex justify-center mb-6">
-                <CallAvatar src={outgoingTarget.avatarUrl} name={outgoingTarget.name} />
-              </div>
-              <h2 className="text-3xl font-bold tracking-tight">{outgoingTarget.name}</h2>
-              <p className="text-indigo-400 font-bold text-sm uppercase tracking-[0.3em] animate-pulse">Iniciando Vídeo...</p>
-            </div>
-
-            <div className="flex justify-center gap-10 mb-12">
-              <ActionButton icon={<Mic className="w-6 h-6" />} label="Mudo" color="bg-white/10 hover:bg-white/20 backdrop-blur-md" />
-              <ActionButton icon={<VideoOff className="w-6 h-6" />} label="Câmera" color="bg-white/10 hover:bg-white/20 backdrop-blur-md" />
-              <ActionButton icon={<PhoneOff className="w-8 h-8" />} label="Cancelar" color="bg-red-500 hover:bg-red-600" onClick={onCancel} />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
     return (
-      <div className="fixed inset-0 z-[600] bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] flex flex-col items-center justify-center text-white gap-10 animate-in fade-in duration-500">
-        <CallAvatar src={outgoingTarget.avatarUrl} name={outgoingTarget.name} />
-        
-        <div className="text-center space-y-3">
-          <h2 className="text-3xl font-bold tracking-tight">{outgoingTarget.name}</h2>
-          <p className="text-gray-400 font-bold text-sm uppercase tracking-[0.3em] animate-pulse">Discando...</p>
+      <PageWrapper>
+        <div className="flex-1 flex flex-col items-center justify-center text-center w-full">
+          <ContactAvatar src={outgoingTarget.avatarUrl} name={outgoingTarget.name} />
+          <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            {outgoingTarget.name}
+          </h2>
+          <span className="mt-8 text-indigo-400 font-bold uppercase tracking-[0.5em] text-[10px] animate-pulse">
+            {isVideo ? 'Iniciando vídeo...' : 'Chamando...'}
+          </span>
         </div>
 
-        <div className="flex gap-10 mt-6">
-          <ActionButton icon={<MicOff className="w-6 h-6" />} label="Mutar" color="bg-slate-700/50 hover:bg-slate-600/50" />
-          <ActionButton icon={<PhoneOff className="w-8 h-8" />} label="Cancelar" color="bg-red-500 hover:bg-red-600 shadow-[0_0_30px_rgba(239,68,68,0.3)]" onClick={onCancel} />
-          <ActionButton icon={<Volume2 className="w-6 h-6" />} label="Viva-Voz" color="bg-slate-700/50 hover:bg-slate-600/50" />
+        <div className="pt-10 pb-4">
+          <ActionButton
+            icon={PhoneOff}
+            label="Cancelar"
+            colorClass="bg-red-500 hover:bg-red-600 shadow-red-900/20"
+            onClick={onCancel}
+          />
         </div>
-      </div>
+      </PageWrapper>
     );
   }
 
   // TELA: RECEBENDO (INCOMING)
   if (incomingCall) {
-    const isVideo = (incomingCall.type || callType) === 'video';
-
+    const isVideo = incomingCall.type === 'video';
     return (
-      <div className="fixed inset-0 z-[600] bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] flex flex-col items-center justify-center text-white gap-10 animate-in fade-in zoom-in-95 duration-500">
-        <CallAvatar src={incomingCall.fromAvatar} />
-
-        <div className="text-center space-y-3">
-          <h2 className="text-4xl font-bold tracking-tight">{incomingCall.fromName}</h2>
-          <p className={`font-black text-sm uppercase tracking-[0.4em] ${isVideo ? 'text-blue-400' : 'text-green-400'}`}>
-            Chamada de {isVideo ? 'Vídeo' : 'Voz'}
-          </p>
+      <PageWrapper>
+        <div className="flex-1 flex flex-col items-center justify-center text-center w-full">
+          <span className="text-indigo-400 font-bold mb-8 animate-pulse text-[10px] md:text-xs uppercase tracking-[0.4em]">
+            {isVideo ? 'Chamada de vídeo recebida' : 'Chamada de voz recebida'}
+          </span>
+          <ContactAvatar src={incomingCall.fromAvatar} name={incomingCall.fromName} />
+          <h2 className="text-4xl md:text-5xl font-black tracking-tight leading-tight">
+            {incomingCall.fromName}
+          </h2>
         </div>
 
-        <div className="flex gap-10 mt-8">
-          <ActionButton 
-            icon={<X className="w-8 h-8" />} 
-            label="Recusar" 
-            color="bg-red-500 hover:bg-red-600 shadow-[0_0_40px_rgba(239,68,68,0.2)]" 
-            onClick={() => onDecline(incomingCall)} 
+        <div className="flex gap-12 md:gap-16 items-center pt-10 pb-4">
+          <ActionButton
+            icon={PhoneOff}
+            label="Recusar"
+            colorClass="bg-red-500 hover:bg-red-600 shadow-red-900/20"
+            onClick={() => onDecline(incomingCall)}
           />
-          
-          {isVideo ? (
-            <>
-              <ActionButton 
-                icon={<Video className="w-8 h-8" />} 
-                label="Vídeo" 
-                color="bg-blue-500 hover:bg-blue-600 shadow-[0_0_40px_rgba(59,130,246,0.3)]" 
-                onClick={() => onAccept(incomingCall)} 
-              />
-              <ActionButton 
-                icon={<Phone className="w-6 h-6" />} 
-                label="Voz" 
-                color="bg-slate-700/50 hover:bg-slate-600/50" 
-                className="opacity-50 grayscale pointer-events-none"
-              />
-            </>
-          ) : (
-            <ActionButton 
-              icon={<Phone className="w-8 h-8" />} 
-              label="Atender" 
-              color="bg-green-500 hover:bg-green-600 shadow-[0_0_40_rgba(34,197,94,0.3)]" 
-              onClick={() => onAccept(incomingCall)} 
-            />
-          )}
+          <ActionButton
+            icon={isVideo ? Video : Phone}
+            label="Atender"
+            colorClass="bg-emerald-500 hover:bg-emerald-600 shadow-emerald-900/20"
+            bounce={true}
+            onClick={() => onAccept(incomingCall)}
+          />
         </div>
-      </div>
+      </PageWrapper>
     );
   }
   return null;
 };
+
 
 // Configuração de Mídia pré-chamada
 const MediaSetup = ({ onComplete, onCancel, callType }) => {
@@ -257,10 +224,22 @@ export default function Modals() {
     showSecurityModal, setShowSecurityModal,
     showAddMemberModal, setShowAddMemberModal, activeRoomId,
     showContactDetailModal, setShowContactDetailModal,
-    selectedContactDetail, setSelectedContactDetail
+    selectedContactDetail, setSelectedContactDetail,
+    newGroupAvatar, setNewGroupAvatar
   } = useChat();
 
   const { currentUserProfile } = useAuth();
+  const groupFileInputRef = React.useRef(null);
+
+  const handleGroupFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setNewGroupAvatar(event.target.result);
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (!user) return null;
 
@@ -322,6 +301,54 @@ export default function Modals() {
             </div>
             <form onSubmit={handleCreateGroup} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-6 overflow-y-auto space-y-5">
+                <div className="flex flex-col items-center pb-2">
+                  <label className="block w-full text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Imagem do Grupo</label>
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative group">
+                      {newGroupAvatar ? (
+                        <img 
+                          src={newGroupAvatar} 
+                          className="w-24 h-24 rounded-3xl object-cover shadow-xl border-4 border-white transition-transform group-hover:scale-105" 
+                          alt="Grupo" 
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-3xl bg-slate-100 flex items-center justify-center text-slate-300 shadow-inner border-2 border-dashed border-slate-200">
+                          <Camera size={32} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-4 w-full">
+                      <input 
+                        type="file" 
+                        ref={groupFileInputRef} 
+                        onChange={handleGroupFileChange} 
+                        className="hidden" 
+                        accept="image/*" 
+                      />
+                      <div className="flex gap-2">
+                        <button 
+                          type="button" 
+                          onClick={() => groupFileInputRef.current.click()}
+                          className="flex-1 py-3.5 bg-indigo-50 text-indigo-600 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-indigo-100 transition-all border-2 border-dashed border-indigo-200 flex items-center justify-center gap-2"
+                        >
+                          <Plus size={14} /> Adicionar Foto
+                        </button>
+                        
+                        {newGroupAvatar && (
+                          <button 
+                            type="button" 
+                            onClick={() => setNewGroupAvatar('')}
+                            className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-all border-2 border-transparent"
+                            title="Remover foto"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Nome do Grupo *</label>
                   <input
@@ -339,7 +366,7 @@ export default function Modals() {
                     value={newGroupDesc}
                     onChange={e => setNewGroupDesc(e.target.value)}
                     placeholder="Qual é o objetivo deste grupo?"
-                    rows={3}
+                    rows={2}
                     className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 resize-none"
                   />
                 </div>

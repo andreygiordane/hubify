@@ -83,7 +83,7 @@ const Calendar = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen bg-slate-50 text-slate-900 font-sans w-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-slate-50 text-slate-900 font-sans w-full overflow-hidden">
       
       {/* HEADER SUPERIOR */}
       <header className="h-16 bg-white border-b border-slate-100 px-4 md:px-10 flex items-center justify-between sticky top-0 z-20 shrink-0">

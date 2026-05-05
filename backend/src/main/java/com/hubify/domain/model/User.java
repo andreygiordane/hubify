@@ -22,6 +22,7 @@ public class User {
     @Column(nullable = false, length = 255)
     private String password;
     
+    @Column(columnDefinition = "TEXT")
     private String avatarUrl;
     private String role;
     @Column(name = "is_online")

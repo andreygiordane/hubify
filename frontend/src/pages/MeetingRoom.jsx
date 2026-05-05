@@ -9,7 +9,7 @@ const getSocketUrl = () => {
   const envUrl = import.meta.env.VITE_SOCKET_URL;
   if (envUrl) return envUrl;
   
-  return 'http://localhost:8080';
+  return 'https://hubify-video-server-358184322842.us-central1.run.app';
 };
 
 const SOCKET_URL = getSocketUrl();
@@ -20,7 +20,7 @@ export default function MeetingRoom() {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    const s = io(SOCKET_URL);
+    const s = io(SOCKET_URL, { transports: ['websocket'] });
     setSocket(s);
     return () => s.disconnect();
   }, []);

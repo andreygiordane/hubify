@@ -6,14 +6,18 @@ import {
   formatTime, useAudioActivity, AudioWave, ChatSidebar, PeopleSidebar, InviteModal, BottomControls 
 } from '../shared/CallComponents';
 
-function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = false, handRaised = false, isScreenSharing = false, isActuallySharing = false }) {
+function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = false, handRaised = false, isScreenSharing = false, isActuallySharing = false, isCamOn = true }) {
   const ref = useRef(null);
   const isSpeaking = useAudioActivity(stream, muted);
 
   useEffect(() => {
-    if (ref.current && stream) { ref.current.srcObject = stream; }
-    else if (ref.current) { ref.current.srcObject = null; }
-  }, [stream]);
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      if (typeof ref.current.play === 'function') {
+        ref.current.play().catch(() => {});
+      }
+    } else if (ref.current) { ref.current.srcObject = null; }
+  }, [stream, isCamOn]);
 
   // Simulação de nível de áudio para animação se estiver falando
   const [audioLevel, setAudioLevel] = React.useState(0);
@@ -31,7 +35,7 @@ function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fal
     <div className={`relative w-full h-full bg-[#080808] border-[0.5px] border-white/5 flex items-center justify-center overflow-hidden transition-all duration-300 
       ${handRaised ? 'ring-inset ring-2 ring-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.4)]' : isSpeaking ? 'ring-inset ring-2 ring-blue-500/20' : ''}`}>
       
-      {stream ? (
+      {stream && isCamOn ? (
         <video ref={ref} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[#0a0a0a]">
@@ -39,10 +43,10 @@ function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fal
             <img 
               src={avatarUrl} 
               alt={name} 
-              className={`w-20 h-20 rounded-full object-cover filter grayscale transition-all duration-300 ${isSpeaking ? 'border-2 border-blue-400 scale-105' : 'border-transparent'}`} 
+              className={`w-24 h-24 rounded-2xl object-cover border-2 border-white/5 shadow-xl transition-all duration-300 ${isSpeaking ? 'scale-105 opacity-100 border-blue-400' : 'opacity-50'}`} 
             />
           ) : (
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center bg-zinc-900 text-white font-black text-xl transition-all duration-300 ${isSpeaking ? 'ring-4 ring-blue-500/30' : ''}`}>
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center bg-zinc-900 text-white font-black text-xl transition-all duration-300 ${isSpeaking ? 'ring-4 ring-blue-500/30' : 'opacity-50'}`}>
               {(name || 'U').substring(0, 2).toUpperCase()}
             </div>
           )}
@@ -124,15 +128,29 @@ export default function MobileVideoCallInterface({
       </header>
 
       <main className="flex-1 relative overflow-hidden flex flex-col">
-          {screenSharing ? (
-              <div className="w-full h-full relative bg-black flex items-center justify-center border-y border-white/5 overflow-hidden">
-                <motion.div 
+          {allParticipants.some(p => p.isScreenSharing) ? (
+            <div className="flex flex-col h-full w-full bg-black">
+              {/* Prioridade: Tela Compartilhada com Zoom */}
+              <div className="flex-[3] relative border-b border-white/5 overflow-hidden group">
+                {allParticipants.filter(p => p.isScreenSharing).map(p => (
+                  <motion.div 
+                    key={p.id}
                     drag={scale > 1}
                     style={{ x, y, scale }}
                     className="w-full h-full flex items-center justify-center"
-                >
-                    <video autoPlay playsInline className="w-full h-full object-contain bg-black" ref={el => { if (el) el.srcObject = localStream }} />
-                </motion.div>
+                  >
+                    <MobileVideoTile 
+                      stream={p.stream} 
+                      name={p.name} 
+                      avatarUrl={p.avatarUrl} 
+                      isLocal={p.isLocal} 
+                      muted={true} 
+                      handRaised={p.handRaised} 
+                      isScreenSharing={p.isScreenSharing}
+                      isCamOn={p.isCamOn}
+                    />
+                  </motion.div>
+                ))}
 
                 {/* ZOOM CONTROLS */}
                 <div className="absolute top-4 right-4 flex gap-2 z-50">
@@ -141,61 +159,49 @@ export default function MobileVideoCallInterface({
                     </button>
                     {scale > 1 && <button onClick={resetView} className="p-3 bg-blue-600 rounded-xl text-white shadow-lg"><RotateCcw size={20} /></button>}
                 </div>
-                
               </div>
-          ) : (
-              allParticipants.some(p => p.isScreenSharing) ? (
-                <div className="flex flex-col h-full w-full bg-black">
-                  {/* Prioridade: Tela Compartilhada */}
-                  <div className="flex-[3] relative border-b border-white/5">
-                    {allParticipants.filter(p => p.isScreenSharing).map(p => (
-                      <MobileVideoTile 
-                        key={p.id} 
-                        stream={p.stream} 
-                        name={p.name} 
-                        avatarUrl={p.avatarUrl} 
-                        isLocal={p.isLocal} 
-                        muted={true} 
-                        handRaised={p.handRaised} 
-                        isScreenSharing={p.isScreenSharing}
-                      />
-                    ))}
-                  </div>
-                  {/* Participantes: Lista Horizontal */}
-                  <div className="flex-1 min-h-[140px] bg-[#050505] flex items-center overflow-x-auto overflow-y-hidden px-3 gap-3 no-scrollbar">
-                    {allParticipants.filter(p => !p.isScreenSharing).map(p => (
-                      <div key={p.id} className="w-32 h-[80%] flex-shrink-0 rounded-xl overflow-hidden border border-white/10 shadow-lg">
-                        <MobileVideoTile 
-                          stream={p.stream} 
-                          name={p.name} 
-                          avatarUrl={p.avatarUrl} 
-                          isLocal={p.isLocal} 
-                          muted={p.isLocal ? !isMicOn : false} 
-                          handRaised={p.handRaised} 
-                          isScreenSharing={false}
-                          isActuallySharing={p.isActuallySharing}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className={`grid gap-0 h-full w-full ${allParticipants.length === 2 ? 'grid-cols-1 grid-rows-2' : 'grid-cols-2'}`}>
-                  {allParticipants.map(p => (
+
+              {/* Participantes: Lista Horizontal (Telas menores para se adaptar) */}
+              <div className="flex-1 min-h-[140px] bg-[#050505] flex items-center overflow-x-auto overflow-y-hidden px-3 gap-3 no-scrollbar">
+                {allParticipants.filter(p => !p.isScreenSharing).map(p => (
+                  <div key={p.id} className="w-32 h-[80%] flex-shrink-0 rounded-xl overflow-hidden border border-white/10 shadow-lg">
                     <MobileVideoTile 
-                      key={p.id} 
                       stream={p.stream} 
                       name={p.name} 
                       avatarUrl={p.avatarUrl} 
                       isLocal={p.isLocal} 
                       muted={p.isLocal ? !isMicOn : false} 
                       handRaised={p.handRaised} 
-                      isScreenSharing={p.isScreenSharing}
+                      isScreenSharing={false}
                       isActuallySharing={p.isActuallySharing}
+                      isCamOn={p.isCamOn}
                     />
-                  ))}
-                </div>
-              )
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className={`grid gap-0 h-full w-full ${
+              allParticipants.length === 1 ? 'grid-cols-1 grid-rows-1' : 
+              allParticipants.length === 2 ? 'grid-cols-1 grid-rows-2' : 
+              allParticipants.length === 3 ? 'grid-cols-1 grid-rows-3' :
+              'grid-cols-2'
+            }`}>
+              {allParticipants.map(p => (
+                <MobileVideoTile 
+                  key={p.id} 
+                  stream={p.stream} 
+                  name={p.name} 
+                  avatarUrl={p.avatarUrl} 
+                  isLocal={p.isLocal} 
+                  muted={p.isLocal ? !isMicOn : false} 
+                  handRaised={p.handRaised} 
+                  isScreenSharing={p.isScreenSharing}
+                  isActuallySharing={p.isActuallySharing}
+                  isCamOn={p.isCamOn}
+                />
+              ))}
+            </div>
           )}
 
       </main>

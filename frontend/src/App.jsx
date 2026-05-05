@@ -32,19 +32,21 @@ export default function App() {
     return <Auth onLogin={login} />;
   }
 
-  if (view === 'room') {
-    return <MeetingRoom />;
-  }
-
   return (
-    <MainLayout view={view} setView={setView}>
-      {view === 'chat' && <Chat />}
-      {view === 'meetings' && <Meetings />}
-      {view === 'calendar' && <Calendar />}
-      {view === 'contacts' && <Contacts />}
-      {view === 'invitations' && <Invitations />}
-      {view === 'settings' && <SettingsProfile />}
+    <>
+      {view === 'room' ? (
+        <MeetingRoom />
+      ) : (
+        <MainLayout view={view} setView={setView}>
+          {view === 'chat' && <Chat />}
+          {view === 'meetings' && <Meetings />}
+          {view === 'calendar' && <Calendar />}
+          {view === 'contacts' && <Contacts />}
+          {view === 'invitations' && <Invitations />}
+          {view === 'settings' && <SettingsProfile />}
+        </MainLayout>
+      )}
       <Modals />
-    </MainLayout>
+    </>
   );
 }

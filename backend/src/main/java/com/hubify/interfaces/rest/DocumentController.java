@@ -126,10 +126,10 @@ public class DocumentController {
             }
 
             // 2. Tentar buscar pelo ID dentro do JSON (fallback para IDs personalizados como group_...)
-            List<DocumentEntity> all = repo.findByCollectionName(collection);
-            System.out.println(">>> Buscando em " + all.size() + " documentos da coleção '" + collection + "'");
+            List<DocumentEntity> candidates = repo.findByCollectionAndJsonId(collection, id);
+            System.out.println(">>> Encontrados " + candidates.size() + " candidatos com padrão de ID no JSON");
             
-            for (DocumentEntity doc : all) {
+            for (DocumentEntity doc : candidates) {
                 try {
                     JsonNode json = objectMapper.readTree(doc.getJsonData());
                     JsonNode idNode = json.get("id");
@@ -139,7 +139,6 @@ public class DocumentController {
                         return ResponseEntity.ok().build();
                     }
                 } catch (Exception e) {
-                    // Ignorar erros de parse individuais
                 }
             }
 

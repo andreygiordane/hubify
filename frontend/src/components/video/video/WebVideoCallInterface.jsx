@@ -6,20 +6,26 @@ import {
   formatTime, useAudioActivity, AudioWave, ChatSidebar, PeopleSidebar, InviteModal, BottomControls 
 } from '../shared/CallComponents';
 
-function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = false, handRaised = false, isScreenSharing = false, isActuallySharing = false }) {
+function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = false, handRaised = false, isScreenSharing = false, isActuallySharing = false, isCamOn = true }) {
   const ref = useRef(null);
   const isSpeaking = useAudioActivity(stream, muted);
 
   useEffect(() => {
-    if (ref.current && stream) { ref.current.srcObject = stream; }
-    else if (ref.current) { ref.current.srcObject = null; }
-  }, [stream]);
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      if (typeof ref.current.play === 'function') {
+        ref.current.play().catch(() => {});
+      }
+    } else if (ref.current) {
+      ref.current.srcObject = null;
+    }
+  }, [stream, isCamOn]);
 
   return (
     <div className={`relative w-full h-full bg-[#080808] border-[0.5px] border-white/5 flex items-center justify-center overflow-hidden group transition-all duration-300 
       ${handRaised ? 'ring-inset ring-4 ring-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : isSpeaking ? 'ring-inset ring-2 ring-blue-500/50' : ''}`}>
       
-      {stream ? (
+      {stream && isCamOn ? (
         <video ref={ref} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[#0a0a0a]">
@@ -27,10 +33,10 @@ function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fa
             <img 
               src={avatarUrl} 
               alt={name} 
-              className={`w-24 h-24 rounded-full object-cover filter grayscale group-hover:grayscale-0 transition-all duration-500 ${isSpeaking ? 'ring-4 ring-blue-500/30 scale-105' : ''}`} 
+              className={`w-32 h-32 rounded-[2.5rem] object-cover border-4 border-white/5 shadow-2xl transition-all duration-500 ${isSpeaking ? 'ring-4 ring-blue-500/30 scale-105' : 'opacity-60'}`} 
             />
           ) : (
-            <div className={`w-24 h-24 rounded-full flex items-center justify-center bg-zinc-900 text-white font-black text-2xl transition-all duration-300 ${isSpeaking ? 'ring-4 ring-blue-500/30 scale-105 shadow-[0_0_30px_rgba(37,99,235,0.2)]' : ''}`}>
+            <div className={`w-24 h-24 rounded-[2.5rem] flex items-center justify-center bg-zinc-900 text-white font-black text-2xl transition-all duration-300 ${isSpeaking ? 'ring-4 ring-blue-500/30 scale-105 shadow-[0_0_30px_rgba(37,99,235,0.2)]' : 'opacity-60'}`}>
               {(name || 'U').substring(0, 2).toUpperCase()}
             </div>
           )}
@@ -167,6 +173,7 @@ export default function WebVideoCallInterface({
                                   handRaised={p.handRaised} 
                                   isScreenSharing={p.isScreenSharing}
                                   isActuallySharing={p.isActuallySharing}
+                                  isCamOn={p.isCamOn}
                                 />
                             </div>
                         ))}
@@ -194,6 +201,7 @@ export default function WebVideoCallInterface({
                     handRaised={p.handRaised} 
                     isScreenSharing={p.isScreenSharing}
                     isActuallySharing={p.isActuallySharing}
+                    isCamOn={p.isCamOn}
                   />
                 ))}
               </div>

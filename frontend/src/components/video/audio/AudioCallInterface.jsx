@@ -116,7 +116,14 @@ export default function AudioCallInterface({ roomId, currentUser, socket, onLeav
   return (
     <div className="h-dynamic-screen w-full bg-[#0a0d14] flex flex-col relative overflow-hidden">
       {allParticipants.filter(p => !p.isLocal).map(p => (
-         <audio key={p.id} autoPlay playsInline ref={el => { if (el && p.stream && el.srcObject !== p.stream) el.srcObject = p.stream }} />
+         <audio key={p.id} autoPlay playsInline ref={el => {
+           if (el && p.stream && el.srcObject !== p.stream) {
+             el.srcObject = p.stream;
+             if (typeof el.play === 'function') {
+               el.play().catch(() => {});
+             }
+           }
+         }} />
       ))}
       
       <header className="px-8 py-5 flex justify-center items-center z-40 shrink-0">

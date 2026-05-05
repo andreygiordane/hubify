@@ -88,7 +88,7 @@ export default function Contacts() {
                 >
                   <div className="relative shrink-0">
                     <img 
-                      src={u.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+                      src={u.avatarUrl || "/images/default-avatar.png"} 
                       alt={u.name} 
                       className="w-12 h-12 rounded-xl bg-slate-100 object-cover border-2 border-white shadow-sm" 
                     />
@@ -126,7 +126,7 @@ export default function Contacts() {
             <div className="px-8 pb-8 -mt-16">
               <div className="relative inline-block mb-6">
                 <img 
-                  src={selectedContact.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+                  src={selectedContact.avatarUrl || "/images/default-avatar.png"} 
                   className="w-32 h-32 rounded-[2.5rem] border-8 border-white shadow-xl bg-white object-cover" 
                 />
                 <div className={`absolute bottom-2 right-2 w-7 h-7 border-4 border-white rounded-full ${statusConfig[selectedContact.status || (selectedContact.isOnline ? 'online' : 'offline')]?.color || 'bg-gray-400'}`}></div>

@@ -13,7 +13,12 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"]
-  }
+  },
+  transports: ['websocket', 'polling']
+});
+
+io.engine.on("connection_error", (err) => {
+  console.log(`[!] Connection Error:`, err.req ? `Request to ${err.req.url}` : 'No request', `| Code: ${err.code} | Message: ${err.message}`);
 });
 
 // State
@@ -36,7 +41,7 @@ io.on('connection', (socket) => {
       
       // Marcar como online no backend
       try {
-        const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:8081/api';
+        const BACKEND_URL = process.env.BACKEND_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
         await fetch(`${BACKEND_URL}/auth/users/${uid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -78,12 +83,27 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('receive-chat', message);
   });
 
+  socket.on('message-created', (message) => {
+    if (!message || !message.roomId) return;
+    socket.broadcast.emit('message-created', message);
+  });
+
   // Novos eventos de Sinalização WebRTC (Padrão Simple-Peer / Classe Peer)
   socket.on("sending-signal", payload => {
+    console.log(`[SIGNAL] Signal from ${payload.callerID} to ${payload.userToSignal}`);
+    try {
+      const sig = payload.signal || {};
+      console.log(`[SIGNAL] Payload type: ${sig.type || (sig.candidate ? 'candidate' : 'unknown')}; sdpLen:${sig.sdp ? sig.sdp.length : 0}; candidateSnippet:${sig.candidate ? (sig.candidate.candidate || '').slice(0,120) : 'n/a'}`);
+    } catch(e) {}
     io.to(payload.userToSignal).emit('user-joined', { signal: payload.signal, callerID: payload.callerID });
   });
 
   socket.on("returning-signal", payload => {
+    console.log(`[SIGNAL] Return signal from ${socket.id} to ${payload.callerID}`);
+    try {
+      const sig = payload.signal || {};
+      console.log(`[SIGNAL] Return payload type: ${sig.type || (sig.candidate ? 'candidate' : 'unknown')}; sdpLen:${sig.sdp ? sig.sdp.length : 0}; candidateSnippet:${sig.candidate ? (sig.candidate.candidate || '').slice(0,120) : 'n/a'}`);
+    } catch(e) {}
     io.to(payload.callerID).emit('receiving-returned-signal', { signal: payload.signal, id: socket.id });
   });
 
@@ -126,7 +146,29 @@ io.on('connection', (socket) => {
   });
 
   socket.on('messages-read', ({ roomId, userId, timestamp }) => {
+    console.log(`[READ] User ${userId} marked room ${roomId} as read at ${new Date(timestamp).toISOString()}`);
     socket.to(roomId).emit('user-read-messages', { userId, roomId, timestamp });
+    console.log(`[READ] Broadcast sent to room ${roomId}`);
+  });
+
+  socket.on('profile-update', ({ userId, data }) => {
+    socket.broadcast.emit('profile-update', { userId, data });
+  });
+
+  socket.on('conversation-deleted', ({ roomId, deletedBy, deletedAt, scope }) => {
+    if (!roomId) return;
+    // Only broadcast group deletions to everyone. DMs should not be broadcast from client.
+    if (roomId.startsWith('group_')) {
+      socket.broadcast.emit('conversation-deleted', { roomId, deletedBy, deletedAt });
+    } else {
+      // Ignore DM deletion broadcasts to avoid removing conversation for the other participant.
+      console.log(`[CONV_DELETE] DM deletion for ${roomId} by ${deletedBy} ignored for broadcast`);
+    }
+  });
+
+  socket.on('message-deleted', ({ messageId, roomId, deletedBy, deletedAt }) => {
+    if (!messageId) return;
+    socket.broadcast.emit('message-deleted', { messageId, roomId, deletedBy, deletedAt });
   });
 
   socket.on('disconnect', async () => {
@@ -136,7 +178,7 @@ io.on('connection', (socket) => {
     if (userId) {
       // Notificar o backend que o usuário ficou offline, mas preservar o status de texto
       try {
-        const BACKEND_URL = process.env.BACKEND_URL || 'http://backend:8081/api';
+        const BACKEND_URL = process.env.BACKEND_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
         await fetch(`${BACKEND_URL}/auth/users/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

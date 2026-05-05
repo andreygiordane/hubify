@@ -4,6 +4,15 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+
+# Build args para variables de env
+ARG VITE_API_URL
+ARG VITE_SOCKET_URL
+
+# Set env vars no build
+ENV VITE_API_URL=${VITE_API_URL:-http://localhost:8082/api}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL:-http://localhost:8080}
+
 RUN npm run build
 
 # Stage 2: Serve

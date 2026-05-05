@@ -260,7 +260,7 @@ export function InviteModal({
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <img 
-                        src={u.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`} 
+                        src={u.avatarUrl || "/images/default-avatar.png"} 
                         alt={u.name} 
                         className="w-12 h-12 rounded-2xl object-cover bg-zinc-900 border border-white/5" 
                       />

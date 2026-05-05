@@ -137,7 +137,8 @@ export default function Auth({ onLogin }) {
   };
 
   return (
-    <div className="h-dynamic-screen bg-white md:bg-[#09090b] text-[#09090b] md:text-[#fafafa] font-sans selection:bg-indigo-500/30 flex flex-col md:flex-row overflow-hidden">
+    <div className="app-viewport">
+      <div className="h-full bg-white md:bg-[#09090b] text-[#09090b] md:text-[#fafafa] font-sans selection:bg-indigo-500/30 flex flex-col md:flex-row overflow-hidden">
       <div className="hidden md:flex relative z-10 w-full md:w-1/2 lg:w-[55%] p-16 flex-col justify-between overflow-hidden border-r border-zinc-800/50">
         <div className="absolute top-[-5%] left-[-5%] w-[70%] h-[70%] bg-indigo-600/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] bg-blue-600/5 rounded-full blur-[70px] md:blur-[100px] pointer-events-none" />
@@ -379,6 +380,7 @@ export default function Auth({ onLogin }) {
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

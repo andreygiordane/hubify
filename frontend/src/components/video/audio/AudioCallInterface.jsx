@@ -111,8 +111,8 @@ export default function AudioCallInterface({ roomId, currentUser, socket, onLeav
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const activeRemote = allParticipants.length > 1 ? allParticipants[1] : null;
-
+  const activeRemote = allParticipants.find(p => !p.isLocal && p.uid !== currentUser?.uid);
+  
   return (
     <div className="h-dynamic-screen w-full bg-[#0a0d14] flex flex-col relative overflow-hidden">
       {allParticipants.filter(p => !p.isLocal).map(p => (

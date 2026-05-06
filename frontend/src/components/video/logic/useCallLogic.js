@@ -68,15 +68,133 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   }, [screenStream]);
 
   useEffect(() => {
-    console.log(`[Componente] useCallLogic montado para sala: ${roomId}`);
+    console.log(`[Componente] useCallLogic montado para sala: ${roomId} | Socket: ${socket?.id || 'Desconectado'}`);
     if (socket && roomId && !hasConnected) {
-      // Adicionar um pequeno delay para garantir que o socket.join no servidor terminou
-      const timer = setTimeout(() => {
+      const handleInit = () => {
+        console.log(`[Socket] Gatilho de inicialização disparado para ${socket.id}`);
+        // 1. Entrar na sala IMEDIATAMENTE (Sinalização em paralelo com Mídia)
+        socket.emit("join-room", {
+          roomId,
+          uid: currentUser.uid,
+          name: currentUser.name,
+          avatarUrl: currentUser.avatarUrl
+        });
+        // 2. Iniciar mídia em paralelo
         initMedia();
-      }, 500);
-      return () => clearTimeout(timer);
+      };
+
+      if (socket.connected) {
+        handleInit();
+      } else {
+        socket.once('connect', handleInit);
+      }
     }
   }, [socket, roomId]);
+
+  // Gerenciamento de Listeners (Prevenção de Duplicidade)
+  useEffect(() => {
+    if (!socket) return;
+
+    const onParticipants = updated => {
+      setRoomParticipants(updated);
+      setStreams(prev => {
+        const next = { ...prev };
+        let changed = false;
+        Object.keys(next).forEach(sid => {
+          const p = updated.find(part => part.socketId === sid);
+          if (next[sid].screen && (!p || !p.isScreenSharing)) {
+            next[sid] = { ...next[sid], screen: null };
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    };
+
+    const onReceiveChat = msg => {
+      const isSelf = msg.sender === currentUser.name;
+      setMessages(prev => [...prev, {
+        sender: msg.sender,
+        text: msg.text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isSelf
+      }]);
+    };
+
+    const onCallEnded = () => onLeave();
+
+    const onAllUsers = users => {
+      console.log(`[Socket] Recebida lista de usuários (${users.length}):`, users);
+      users.forEach(id => {
+        if (peersRef.current.find(p => p.peerID === id)) return;
+        const peer = createPeer(id, socket.id, localStreamRef.current);
+        peer.on("stream", s => {
+          console.log(`[WebRTC] Stream recebido de ${id}`);
+          setStreams(prev => ({ ...prev, [id]: { ...(prev[id] || {}), webcam: s } }));
+        });
+        peersRef.current.push({ peerID: id, peer });
+      });
+    };
+
+    const onUserJoined = payload => {
+      console.log(`[Socket] Sinal recebido de ${payload.callerID}`);
+      const existingPeer = peersRef.current.find(p => p.peerID === payload.callerID);
+      if (existingPeer) {
+        try {
+          existingPeer.peer.signal(payload.signal);
+        } catch (e) { console.warn("[WebRTC] Erro ao sinalizar peer existente:", e.message); }
+      } else {
+        const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
+        peer.on("stream", s => {
+          console.log(`[WebRTC] Stream recebido de ${payload.callerID} (via user-joined)`);
+          setStreams(prev => ({ ...prev, [payload.callerID]: { ...(prev[payload.callerID] || {}), webcam: s } }));
+        });
+        peersRef.current.push({ peerID: payload.callerID, peer });
+      }
+    };
+
+    const onReturnSignal = p => {
+      const item = peersRef.current.find(i => i.peerID === p.id);
+      if (item) {
+        try {
+          item.peer.signal(p.signal);
+        } catch (e) { console.warn("[WebRTC] Erro ao sinalizar peer retornado:", e.message); }
+      }
+    };
+
+    const onUserDisconnected = userId => {
+      console.log(`[Socket] Usuário saiu:`, userId);
+      setRoomParticipants(prev => prev.filter(p => p.socketId !== userId));
+      const peerObj = peersRef.current.find(p => p.peerID === userId);
+      if (peerObj) {
+        peerObj.peer.destroy();
+        peersRef.current = peersRef.current.filter(p => p.peerID !== userId);
+      }
+      setStreams(prev => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    };
+
+    socket.on('room-participants', onParticipants);
+    socket.on('receive-chat', onReceiveChat);
+    socket.on('call-ended', onCallEnded);
+    socket.on('all-users', onAllUsers);
+    socket.on('user-joined', onUserJoined);
+    socket.on('receiving-returned-signal', onReturnSignal);
+    socket.on('user-disconnected', onUserDisconnected);
+
+    return () => {
+      socket.off('room-participants', onParticipants);
+      socket.off('receive-chat', onReceiveChat);
+      socket.off('call-ended', onCallEnded);
+      socket.off('all-users', onAllUsers);
+      socket.off('user-joined', onUserJoined);
+      socket.off('receiving-returned-signal', onReturnSignal);
+      socket.off('user-disconnected', onUserDisconnected);
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (socket && roomId) {
@@ -84,6 +202,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     }
   }, [isMicOn, isVideoOn, isHandRaised, screenSharing]);
 
+  // Removido temporariamente para evitar kicks acidentais
+  /*
   useEffect(() => {
     if (roomId && roomId.startsWith('dm_')) {
       if (roomParticipants.length > 1) {
@@ -93,166 +213,39 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       }
     }
   }, [roomParticipants, roomId, hasConnected, onLeave]);
-
+  */
   const initMedia = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: !isVoiceMode, audio: true });
-      setLocalStream(stream);
-      setCameraStream(stream);
+    if (!socket || !socket.connected) return;
 
-      if (socket) {
-        socket.on('room-participants', updated => {
-          setRoomParticipants(updated);
-          setStreams(prev => {
-            const next = { ...prev };
-            let changed = false;
-            Object.keys(next).forEach(sid => {
-              const p = updated.find(part => part.socketId === sid);
-              if (next[sid].screen && (!p || !p.isScreenSharing)) {
-                next[sid] = { ...next[sid], screen: null };
-                changed = true;
-              }
-            });
-            return changed ? next : prev;
-          });
+    console.log(`[Media] Obtendo mídia local na sala: ${roomId}`);
+
+    // Tentar obter Media (Async)
+    navigator.mediaDevices.getUserMedia({ video: !isVoiceMode, audio: true })
+      .then(stream => {
+        console.log(`[Media] Local stream obtido com sucesso`);
+        setLocalStream(stream);
+        setCameraStream(stream);
+        // Adicionar o stream a todos os peers já conectados
+        peersRef.current.forEach(({ peer }) => {
+          try { peer.addStream(stream); } catch (e) {}
         });
-        socket.on('receive-chat', msg => {
-          const isSelf = msg.sender === currentUser.name;
-          setMessages(prev => [...prev, {
-            sender: msg.sender,
-            text: msg.text,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isSelf
-          }]);
-        });
-        socket.on('call-ended', () => onLeave());
-
-        socket.on('user-joined-room', payload => {
-          setMessages(prev => [...prev, {
-            sender: 'Sistema',
-            text: `${payload.name} entrou na sala.`,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            isSelf: false
-          }]);
-        });
-
-        socket.on("all-users", users => {
-          users.forEach(id => {
-            // EVITAR DUPLICADOS
-            if (peersRef.current.find(p => p.peerID === id)) return;
-
-            const peer = createPeer(id, socket.id, stream);
-            peer.on("stream", s => {
-              console.log(`[WebRTC] Stream received from ${id}:`, s.id, "Tracks:", s.getTracks().map(t => t.kind));
-              setStreams(prev => {
-                const current = prev[id] || {};
-                const currentHasVideo = current.webcam?.getVideoTracks().length > 0;
-                const newHasVideo = s.getVideoTracks().length > 0;
-
-                if (!current.webcam || (!currentHasVideo && newHasVideo)) {
-                  return { ...prev, [id]: { ...current, webcam: s } };
-                }
-
-                if (current.webcam && current.webcam.id !== s.id) {
-                  return { ...prev, [id]: { ...current, screen: s } };
-                }
-                return prev;
-              });
-            });
-            peersRef.current.push({ peerID: id, peer });
-          });
-        });
-
-        socket.on("user-joined", payload => {
-          const existingPeer = peersRef.current.find(p => p.peerID === payload.callerID);
-          if (existingPeer) {
-            existingPeer.peer.signal(payload.signal);
-          } else {
-            const peer = addPeer(payload.signal, payload.callerID, stream);
-            peer.on("stream", s => {
-              const peerID = payload.callerID;
-              console.log(`[WebRTC] Stream received from ${peerID}:`, s.id, "Tracks:", s.getTracks().map(t => t.kind));
-              setStreams(prev => {
-                const current = prev[peerID] || {};
-                const currentHasVideo = current.webcam?.getVideoTracks().length > 0;
-                const newHasVideo = s.getVideoTracks().length > 0;
-
-                if (!current.webcam || (!currentHasVideo && newHasVideo)) {
-                  return { ...prev, [peerID]: { ...current, webcam: s } };
-                }
-
-                if (current.webcam && current.webcam.id !== s.id) {
-                  return { ...prev, [peerID]: { ...current, screen: s } };
-                }
-                return prev;
-              });
-            });
-            peersRef.current.push({ peerID: payload.callerID, peer });
-          }
-        });
-
-        socket.on("receiving-returned-signal", p => {
-          const item = peersRef.current.find(i => i.peerID === p.id);
-          if (item) item.peer.signal(p.signal);
-        });
-
-        socket.on("user-disconnected", userId => {
-          setRoomParticipants(currentParticipants => {
-            const participant = currentParticipants.find(p => p.socketId === userId);
-            if (participant) {
-              setMessages(prev => [...prev, {
-                sender: 'Sistema',
-                text: `${participant.name} saiu da reunião.`,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                isSelf: false
-              }]);
-            }
-            return currentParticipants.filter(p => p.socketId !== userId);
-          });
-
-          const peerObj = peersRef.current.find(p => p.peerID === userId);
-          if (peerObj) {
-            peerObj.peer.destroy();
-            peersRef.current = peersRef.current.filter(p => p.peerID !== userId);
-          }
-          setStreams(prev => {
-            const next = { ...prev };
-            delete next[userId];
-            return next;
-          });
-        });
-
-        socket.emit("join-room", {
-          roomId,
-          uid: currentUser.uid,
-          name: currentUser.name,
-          avatarUrl: currentUser.avatarUrl
-        });
-      }
-    } catch (err) { console.error(err); }
+      })
+      .catch(err => {
+        console.error(`[Media] Erro ao obter stream local:`, err);
+      });
   };
 
   const createPeer = (userToSignal, callerID, stream) => {
-    console.log(`[WebRTC] Inciando oferta (Offer) para: ${userToSignal}`);
     const peer = new Peer({ initiator: true, stream });
     peer.on("signal", signal => {
-      console.log(`[WebRTC] Sinal de oferta gerado para ${userToSignal}`);
-      try {
-        console.log(`[WebRTC] Offer signal details: type=${signal.type || 'n/a'} sdpLen=${signal.sdp ? signal.sdp.length : 0} hasCandidate=${'candidate' in signal}`);
-      } catch (e) {}
       socket.emit("sending-signal", { userToSignal, callerID, signal });
     });
     return peer;
   };
 
   const addPeer = (incomingSignal, callerID, stream) => {
-    console.log(`[WebRTC] Recebida oferta de ${callerID}. Gerando resposta (Answer)...`);
     const peer = new Peer({ initiator: false, stream });
     peer.on("signal", signal => {
-      console.log(`[WebRTC] Sinal de resposta gerado para ${callerID}`);
-      try {
-        console.log(`[WebRTC] Answer signal details: type=${signal.type || 'n/a'} sdpLen=${signal.sdp ? signal.sdp.length : 0} hasCandidate=${'candidate' in signal}`);
-      } catch (e) {}
       socket.emit("returning-signal", { signal, callerID });
     });
     peer.signal(incomingSignal);
@@ -277,37 +270,23 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     try {
       if (screenSharing) {
         peersRef.current.forEach(({ peer }) => {
-          if (screenStream) {
-            try { peer.removeStream(screenStream); } catch (e) { console.error("Error removing stream:", e); }
-          }
+          if (screenStream) { try { peer.removeStream(screenStream); } catch (e) {} }
         });
-        if (screenStream) {
-          screenStream.getTracks().forEach(t => t.stop());
-        }
+        if (screenStream) screenStream.getTracks().forEach(t => t.stop());
         setScreenStream(null);
         setScreenSharing(false);
         return;
       }
-
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       setScreenStream(stream);
       setScreenSharing(true);
-
-      peersRef.current.forEach(({ peer }) => {
-        peer.addStream(stream);
-      });
-
+      peersRef.current.forEach(({ peer }) => peer.addStream(stream));
       stream.getVideoTracks()[0].onended = () => {
         setScreenSharing(false);
         setScreenStream(null);
-        peersRef.current.forEach(({ peer }) => {
-          try { peer.removeStream(stream); } catch (e) { console.error("Error removing stream:", e); }
-        });
+        peersRef.current.forEach(({ peer }) => { try { peer.removeStream(stream); } catch (e) {} });
       };
-    } catch (err) {
-      console.error("Screen share error:", err);
-      setScreenSharing(false);
-    }
+    } catch (err) { console.error(err); setScreenSharing(false); }
   };
 
   const handleSendMessage = (text) => {
@@ -317,94 +296,90 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const inviteUser = async (targetId, handleInviteToCall) => {
     if (invitedUserIds.has(targetId)) return;
-
-    // Optimistic update to block button immediately
     setInvitedUserIds(prev => new Set(prev).add(targetId));
-
     try {
       await handleInviteToCall(targetId, roomId, callType);
     } catch (err) {
-      // Revert if failed
-      setInvitedUserIds(prev => {
-        const next = new Set(prev);
-        next.delete(targetId);
-        return next;
-      });
+      setInvitedUserIds(prev => { const next = new Set(prev); next.delete(targetId); return next; });
     }
   };
 
   const handleExit = () => {
     if (socket && roomId) {
-      if (roomId.startsWith('dm_')) {
-        socket.emit('end-call', { roomId });
-      } else {
-        socket.emit('leave-room', { roomId });
-      }
+      if (roomId.startsWith('dm_')) socket.emit('end-call', { roomId });
+      else socket.emit('leave-room', { roomId });
     }
     onLeave();
   };
 
-  const allParticipants = [
-    // Local Webcam
-    {
+  // REATOR: allParticipants agora é guiado pela lista de participantes do servidor
+  let participantsList = roomParticipants.map(p => {
+    const isLocal = p.socketId === socket?.id;
+    const userStreams = streams[p.socketId] || {};
+    
+    return {
+      id: p.socketId,
+      uid: p.uid,
+      name: isLocal ? (currentUser?.name || p.name) : (p.name || 'Convidado'),
+      avatarUrl: isLocal ? (currentUser?.avatarUrl || currentUser?.avatar || p.avatarUrl) : p.avatarUrl,
+      isLocal,
+      stream: isLocal ? cameraStream : userStreams.webcam,
+      handRaised: isLocal ? isHandRaised : p.isHandRaised,
+      isMicOn: isLocal ? isMicOn : p.isMicOn,
+      isCamOn: isLocal ? isVideoOn : p.isCamOn,
+      isActuallySharing: isLocal ? screenSharing : !!userStreams.screen,
+      isScreenSharing: false
+    };
+  });
+
+  // Fallback: se a lista do servidor estiver vazia ou não tiver o local, forçar o local
+  const hasLocal = participantsList.some(p => p.isLocal);
+  if (!hasLocal && currentUser) {
+    participantsList.unshift({
       id: socket?.id || 'local',
-      uid: currentUser?.uid,
-      stream: cameraStream,
+      uid: currentUser.uid,
+      name: `${currentUser.name} (Conectando...)`,
+      avatarUrl: currentUser.avatarUrl,
       isLocal: true,
-      name: currentUser?.name || 'Você (Eu)',
-      avatarUrl: currentUser?.avatarUrl,
+      stream: cameraStream,
       handRaised: isHandRaised,
-      isMicOn,
+      isMicOn: isMicOn,
       isCamOn: isVideoOn,
-      isActuallySharing: screenSharing
-    },
-    ...(screenSharing && screenStream && screenStream.active ? [{
+      isActuallySharing: screenSharing,
+      isScreenSharing: false
+    });
+  }
+
+  const allParticipants = participantsList;
+
+  // Adicionar telas compartilhadas como participantes virtuais
+  if (screenSharing && screenStream && screenStream.active) {
+    allParticipants.push({
       id: (socket?.id || 'local') + '-screen',
       uid: currentUser?.uid,
       stream: screenStream,
       isLocal: true,
       isScreenSharing: true,
-      name: `Tela de ${currentUser?.name || 'Você'}`,
-      handRaised: false,
-      isMicOn: false,
-      isCamOn: true
-    }] : []),
-    // Remote Participants
-    ...Object.entries(streams).flatMap(([socketId, userStreams]) => {
-      const serverState = roomParticipants.find(p => p.socketId === socketId);
-      const isSharing = !!userStreams.screen;
-      const res = [];
-      if (userStreams.webcam) {
-        res.push({
-          id: socketId,
-          uid: serverState?.uid,
-          stream: userStreams.webcam,
-          isLocal: false,
-          name: serverState?.name || `Convidado`,
-          avatarUrl: serverState?.avatarUrl,
-          handRaised: serverState?.isHandRaised || false,
-          isMicOn: serverState?.isMicOn ?? true,
-          isCamOn: serverState?.isCamOn ?? true,
-          isActuallySharing: isSharing
-        });
-      }
-      if (userStreams.screen && userStreams.screen.active) {
-        res.push({
-          id: socketId + '-screen',
-          uid: serverState?.uid,
-          stream: userStreams.screen,
-          isLocal: false,
-          isScreenSharing: true,
-          name: `Tela de ${serverState?.name || 'Convidado'}`,
-          avatarUrl: serverState?.avatarUrl,
-          handRaised: false,
-          isMicOn: false,
-          isCamOn: true
-        });
-      }
-      return res;
-    })
-  ];
+      name: `Sua Tela`,
+      handRaised: false, isMicOn: false, isCamOn: true
+    });
+  }
+
+  Object.entries(streams).forEach(([sid, userStreams]) => {
+    if (userStreams.screen && userStreams.screen.active) {
+      const p = roomParticipants.find(part => part.socketId === sid);
+      allParticipants.push({
+        id: sid + '-screen',
+        uid: p?.uid,
+        stream: userStreams.screen,
+        isLocal: false,
+        isScreenSharing: true,
+        name: `Tela de ${p?.name || 'Convidado'}`,
+        avatarUrl: p?.avatarUrl,
+        handRaised: false, isMicOn: false, isCamOn: true
+      });
+    }
+  });
 
   return {
     streams, localStream, cameraStream, screenSharing, time,

@@ -91,6 +91,7 @@ export const ChatProvider = ({ children }) => {
   const [meetings, setMeetings] = useState([]);
   const [activeDMs, setActiveDMs] = useState([]);
   const [typingUsers, setTypingUsers] = useState({}); // { roomId: { userId: userName } }
+  const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
   const [readTimestamps, setReadTimestamps] = useState({});
   
@@ -571,22 +572,25 @@ export const ChatProvider = ({ children }) => {
     if (!user) return;
 
     console.log(`[SOCKET_INIT] Initializing socket connection to ${SOCKET_URL}`);
-    const socket = io(SOCKET_URL, SOCKET_OPTIONS);
-    socketRef.current = socket;
+    const newSocket = io(SOCKET_URL, SOCKET_OPTIONS);
+    socketRef.current = newSocket;
+    setSocket(newSocket);
 
-    socket.on('connect', () => {
-      console.log(`[SOCKET_CONNECT] Connected with ID: ${socket.id}`);
+    newSocket.on('connect', () => {
+      console.log(`[SOCKET_CONNECT] Connected with ID: ${newSocket.id}`);
       // If there's an active room, join it immediately
       if (activeRoomIdRef.current && view !== 'room') {
-        socket.emit('join-room', { 
+        const profileAvatar = currentUserProfile?.avatarUrl || currentUserProfile?.avatar;
+        newSocket.emit('join-room', { 
           roomId: activeRoomIdRef.current, 
           uid: user.id, 
-          name: currentUserProfile?.name || user.username 
+          name: currentUserProfile?.name || user.username,
+          avatarUrl: profileAvatar
         });
       }
     });
 
-    socket.on('user-typing', ({ userId, userName }) => {
+    newSocket.on('user-typing', ({ userId, userName }) => {
       const roomId = activeRoomIdRef.current;
       if (!roomId) return;
       setTypingUsers(prev => ({
@@ -595,7 +599,7 @@ export const ChatProvider = ({ children }) => {
       }));
     });
 
-    socket.on('user-stop-typing', ({ userId }) => {
+    newSocket.on('user-stop-typing', ({ userId }) => {
       const roomId = activeRoomIdRef.current;
       if (!roomId) return;
       setTypingUsers(prev => {
@@ -605,7 +609,7 @@ export const ChatProvider = ({ children }) => {
       });
     });
 
-    socket.on('user-read-messages', ({ userId, roomId, timestamp }) => {
+    newSocket.on('user-read-messages', ({ userId, roomId, timestamp }) => {
       console.log(`[SOCKET_READ] Received user-read-messages from user ${userId} for room ${roomId} at ${new Date(timestamp).toISOString()}`);
       // 🔥 Atualizar o estado separado de readTimestamps que NÃO é sobrescrito pelo polling
       setOtherUsersReadTimestamps(prev => {
@@ -616,11 +620,11 @@ export const ChatProvider = ({ children }) => {
       });
     });
 
-    socket.on('profile-update', ({ userId, data }) => {
+    newSocket.on('profile-update', ({ userId, data }) => {
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
     });
 
-    socket.on('message-created', (message) => {
+    newSocket.on('message-created', (message) => {
       if (!message?.id || !message?.roomId) return;
       console.log(`[SOCKET_MSG] New message received in room ${message.roomId} from ${message.senderId}`);
       const isDm = message.roomId.startsWith('dm_');
@@ -637,7 +641,7 @@ export const ChatProvider = ({ children }) => {
       }
     });
 
-    socket.on('message-deleted', ({ messageId, roomId }) => {
+    newSocket.on('message-deleted', ({ messageId, roomId }) => {
       if (!messageId) return;
       setAllMessages(prev => prev.filter(m => m.id !== messageId));
       if (roomId) {
@@ -645,7 +649,7 @@ export const ChatProvider = ({ children }) => {
       }
     });
 
-    socket.on('conversation-deleted', ({ roomId }) => {
+    newSocket.on('conversation-deleted', ({ roomId }) => {
       if (!roomId) return;
       setDeletedRoomIds(prev => (prev.includes(roomId) ? prev : [...prev, roomId]));
       processingDeletions.current.add(roomId);
@@ -658,7 +662,7 @@ export const ChatProvider = ({ children }) => {
     });
 
     return () => {
-      socket.disconnect();
+      newSocket.disconnect();
     };
   }, [user]);
 
@@ -1341,6 +1345,7 @@ export const ChatProvider = ({ children }) => {
   }, [groups, activeDMs, users, user, allMessages, deletedRoomIds]);
 
   const value = {
+    socket,
     activeRoomId, setActiveRoomId,
     allMessages, users, groups, meetings, chatRooms, readTimestamps,
     otherUsersReadTimestamps, // 🔥 Novo: readTimestamps dos outros usuários (via Socket.IO)

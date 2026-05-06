@@ -6,18 +6,7 @@ export class Peer {
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com' },
-        { urls: 'stun:stun.apple.com' },
-        { urls: 'stun:stun.ekiga.net' },
-        { urls: 'stun:stun.ideasip.com' },
-        { urls: 'stun:stun.rixtelecom.se' },
-        { urls: 'stun:stun.schlund.de' },
-        { urls: 'stun:stun.stunprotocol.org' },
-        { urls: 'stun:stun.voiparound.com' },
-        { urls: 'stun:stun.voipbuster.com' },
-        { urls: 'stun:stun.voipstunt.com' }
+        { urls: 'stun:stun.services.mozilla.com' }
       ],
       iceCandidatePoolSize: 10
     });
@@ -47,11 +36,12 @@ export class Peer {
     };
 
     this._pc.ontrack = (e) => {
-      console.log("[WebRTC] Track received:", e.track.kind);
+      console.log("[WebRTC] Track received:", e.track.kind, "| Stream count:", e.streams ? e.streams.length : 0);
       if (e.streams && e.streams[0]) {
+        console.log("[WebRTC] Emitting stream from track event");
         this.emit("stream", e.streams[0]);
       } else {
-        // Fallback para navegadores que não agrupam tracks em streams automaticamente
+        console.log("[WebRTC] Fallback: creating MediaStream from track");
         const inboundStream = new MediaStream([e.track]);
         this.emit("stream", inboundStream);
       }
@@ -75,8 +65,19 @@ export class Peer {
 
   signal(data) {
     if (!data) return;
+    
+    // Proteção contra sinais duplicados ou fora de ordem
+    if (data.type === 'answer' && this._pc.signalingState === 'stable') {
+      console.warn('[WebRTC] Ignorando answer: conexão já está estável');
+      return;
+    }
+    if (data.type === 'offer' && this._pc.signalingState !== 'stable') {
+      console.warn('[WebRTC] Ignorando offer: conexão já está processando outro sinal');
+      return;
+    }
+
     if (data.type === 'offer' || data.type === 'answer') {
-      try { console.log('[WebRTC] signal() received remote description:', data.type, 'sdpLen=', data.sdp ? data.sdp.length : 0); } catch(e) {}
+      try { console.log('[WebRTC] signal() processando:', data.type, 'Estado:', this._pc.signalingState); } catch(e) {}
       this._pc.setRemoteDescription(new RTCSessionDescription(data))
         .then(() => {
           // Process queued candidates

@@ -32,22 +32,19 @@ export default function MeetingInterface({
     };
   }, []);
 
-  if (callType === 'audio') {
-    return (
-      <AudioCallInterface 
-        roomId={roomId} 
-        currentUser={currentUser} 
-        socket={socket} 
-        onLeave={onLeave} 
-      />
-    );
-  }
-
-  return (
+  return callType === 'audio' ? (
+    <AudioCallInterface 
+      roomId={roomId} 
+      currentUser={currentUser} 
+      socket={socket} 
+      onLeave={onLeave} 
+    />
+  ) : (
     <VideoCallInterface 
       roomId={roomId} 
       currentUser={currentUser} 
       socket={socket} 
+      callType={callType}
       onLeave={onLeave} 
     />
   );

@@ -6,121 +6,48 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
-const server = http.createServer(app);
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
+const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
+  cors: { origin: "*", methods: ["GET", "POST"] },
   transports: ['websocket', 'polling']
 });
 
-io.engine.on("connection_error", (err) => {
-  console.log(`[!] Connection Error:`, err.req ? `Request to ${err.req.url}` : 'No request', `| Code: ${err.code} | Message: ${err.message}`);
-});
-
-// State
-const rooms = {}; // roomId -> Map of participant states
-
-const cleanupRoom = (roomId) => {
-  if (rooms[roomId] && rooms[roomId].size === 0) {
-    delete rooms[roomId];
-    console.log(`[GC] Room ${roomId} removed from memory (empty). Active rooms: ${Object.keys(rooms).length}`);
-  }
-};
+const rooms = {};
 
 io.on('connection', (socket) => {
-  console.log(`[+] User connected: ${socket.id} | Active connections: ${io.engine.clientsCount}`);
+  console.log(`[+] Conectado: ${socket.id}`);
 
-  socket.on('join-room', async ({ roomId, uid, name, avatarUrl }) => {
-    try {
-      socket.join(roomId);
-      socket.userId = uid; // Store for disconnect logic
-      
-      // Marcar como online no backend
-      try {
-        const BACKEND_URL = process.env.BACKEND_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
-        await fetch(`${BACKEND_URL}/auth/users/${uid}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isOnline: true })
-        });
-      } catch (e) {
-        console.error(`[STATUS] Error marking online for ${uid}:`, e.message);
-      }
+  socket.on('join-room', ({ roomId, uid, name, avatarUrl }) => {
+    socket.join(roomId);
+    socket.roomId = roomId;
+    socket.userId = uid;
 
-      if (!rooms[roomId]) rooms[roomId] = new Map();
-      
-      // Envia a lista de sockets existentes para o novo usuário (para a classe Peer)
-      const existingSockets = Array.from(rooms[roomId].keys());
-      socket.emit("all-users", existingSockets);
+    if (!rooms[roomId]) rooms[roomId] = new Map();
+    
+    // Se o usuário já estava na sala com outro socket, remover o antigo
+    rooms[roomId].set(socket.id, { socketId: socket.id, uid, name, avatarUrl, isMicOn: true, isCamOn: true });
 
-      rooms[roomId].set(socket.id, { uid, name, avatarUrl, socketId: socket.id, isMicOn: true, isCamOn: true });
-      
-      const participants = Array.from(rooms[roomId].values());
-      io.to(roomId).emit('room-participants', participants);
-      console.log(`[ROOM] User ${name} (${uid}) joined ${roomId}. Participants: ${participants.length}`);
-    } catch (e) {
-      console.error(`Error joining room:`, e);
-    }
+    // Avisar quem já está na sala
+    socket.to(roomId).emit('user-connected', socket.id);
+
+    // Enviar lista para todos
+    io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
   });
 
-  socket.on('update-user-state', ({ roomId, state }) => {
-    try {
-      if (rooms[roomId] && rooms[roomId].has(socket.id)) {
-        const current = rooms[roomId].get(socket.id);
-        rooms[roomId].set(socket.id, { ...current, ...state });
-        io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
-      }
-    } catch (e) {
-      console.error(`Error updating state:`, e);
-    }
-  });
-
-  socket.on('send-chat', ({ roomId, message }) => {
-    io.to(roomId).emit('receive-chat', message);
-  });
-
-  socket.on('message-created', (message) => {
-    if (!message || !message.roomId) return;
-    socket.broadcast.emit('message-created', message);
-  });
-
-  // Novos eventos de Sinalização WebRTC (Padrão Simple-Peer / Classe Peer)
-  socket.on("sending-signal", payload => {
-    console.log(`[SIGNAL] Signal from ${payload.callerID} to ${payload.userToSignal}`);
-    try {
-      const sig = payload.signal || {};
-      console.log(`[SIGNAL] Payload type: ${sig.type || (sig.candidate ? 'candidate' : 'unknown')}; sdpLen:${sig.sdp ? sig.sdp.length : 0}; candidateSnippet:${sig.candidate ? (sig.candidate.candidate || '').slice(0,120) : 'n/a'}`);
-    } catch(e) {}
+  socket.on('sending-signal', payload => {
     io.to(payload.userToSignal).emit('user-joined', { signal: payload.signal, callerID: payload.callerID });
   });
 
-  socket.on("returning-signal", payload => {
-    console.log(`[SIGNAL] Return signal from ${socket.id} to ${payload.callerID}`);
-    try {
-      const sig = payload.signal || {};
-      console.log(`[SIGNAL] Return payload type: ${sig.type || (sig.candidate ? 'candidate' : 'unknown')}; sdpLen:${sig.sdp ? sig.sdp.length : 0}; candidateSnippet:${sig.candidate ? (sig.candidate.candidate || '').slice(0,120) : 'n/a'}`);
-    } catch(e) {}
+  socket.on('returning-signal', payload => {
     io.to(payload.callerID).emit('receiving-returned-signal', { signal: payload.signal, id: socket.id });
   });
 
-  // Legado (Mantido por compatibilidade de transição)
-  socket.on('webrtc-signal', ({ roomId, signal }) => {
-    try {
-      if (signal.targetUid && rooms[roomId]) {
-        const target = Array.from(rooms[roomId].values()).find(p => p.uid === signal.targetUid);
-        if (target) {
-          io.to(target.socketId).emit('webrtc-signal', signal);
-          return;
-        }
-      }
-      socket.to(roomId).emit('webrtc-signal', signal);
-    } catch (e) {
-      console.error(`Error in WebRTC signaling:`, e);
-    }
+  // ENCERRAMENTO DE CHAMADA (O que estava faltando)
+  socket.on('end-call', ({ roomId }) => {
+    console.log(`[CALL] Ending call in room ${roomId}`);
+    io.to(roomId).emit('call-ended');
   });
 
   socket.on('leave-room', ({ roomId }) => {
@@ -129,79 +56,28 @@ io.on('connection', (socket) => {
       rooms[roomId].delete(socket.id);
       io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
       io.to(roomId).emit('user-disconnected', socket.id);
-      cleanupRoom(roomId);
     }
   });
 
-  socket.on('end-call', ({ roomId }) => {
-    io.to(roomId).emit('call-ended');
-  });
-
-  socket.on('typing', ({ roomId, userId, userName }) => {
-    socket.to(roomId).emit('user-typing', { userId, userName });
-  });
-
-  socket.on('stop-typing', ({ roomId, userId }) => {
-    socket.to(roomId).emit('user-stop-typing', { userId });
-  });
-
-  socket.on('messages-read', ({ roomId, userId, timestamp }) => {
-    console.log(`[READ] User ${userId} marked room ${roomId} as read at ${new Date(timestamp).toISOString()}`);
-    socket.to(roomId).emit('user-read-messages', { userId, roomId, timestamp });
-    console.log(`[READ] Broadcast sent to room ${roomId}`);
-  });
-
-  socket.on('profile-update', ({ userId, data }) => {
-    socket.broadcast.emit('profile-update', { userId, data });
-  });
-
-  socket.on('conversation-deleted', ({ roomId, deletedBy, deletedAt, scope }) => {
-    if (!roomId) return;
-    // Only broadcast group deletions to everyone. DMs should not be broadcast from client.
-    if (roomId.startsWith('group_')) {
-      socket.broadcast.emit('conversation-deleted', { roomId, deletedBy, deletedAt });
-    } else {
-      // Ignore DM deletion broadcasts to avoid removing conversation for the other participant.
-      console.log(`[CONV_DELETE] DM deletion for ${roomId} by ${deletedBy} ignored for broadcast`);
+  socket.on('disconnect', () => {
+    const { roomId } = socket;
+    if (roomId && rooms[roomId]) {
+      rooms[roomId].delete(socket.id);
+      io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
+      io.to(roomId).emit('user-disconnected', socket.id);
     }
   });
 
-  socket.on('message-deleted', ({ messageId, roomId, deletedBy, deletedAt }) => {
-    if (!messageId) return;
-    socket.broadcast.emit('message-deleted', { messageId, roomId, deletedBy, deletedAt });
-  });
-
-  socket.on('disconnect', async () => {
-    console.log(`[-] User disconnected: ${socket.id} | Active connections: ${io.engine.clientsCount - 1}`);
-    const userId = socket.userId; // Precisamos armazenar o userId no socket ao conectar
-    
-    if (userId) {
-      // Notificar o backend que o usuário ficou offline, mas preservar o status de texto
-      try {
-        const BACKEND_URL = process.env.BACKEND_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
-        await fetch(`${BACKEND_URL}/auth/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isOnline: false })
-        });
-        console.log(`[STATUS] User ${userId} marked as OFFLINE (presence only)`);
-      } catch (e) {
-        console.error(`[STATUS] Error updating offline status for ${userId}:`, e.message);
-      }
-    }
-
-    for (const roomId in rooms) {
-      if (rooms[roomId].has(socket.id)) {
-        rooms[roomId].delete(socket.id);
-        io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
-        io.to(roomId).emit('user-disconnected', socket.id);
-        cleanupRoom(roomId);
-      }
+  socket.on('update-user-state', (data) => {
+    if (rooms[data.roomId] && rooms[data.roomId].has(socket.id)) {
+      const current = rooms[data.roomId].get(socket.id);
+      rooms[data.roomId].set(socket.id, { ...current, ...data.state });
+      io.to(data.roomId).emit('room-participants', Array.from(rooms[data.roomId].values()));
     }
   });
+  
+  socket.on('send-chat', (data) => io.to(data.roomId).emit('receive-chat', data.message));
 });
 
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Video Signaling Server listening on port ${PORT} at 0.0.0.0`);
-});
+server.listen(PORT, '0.0.0.0', () => console.log(`Server listening on ${PORT}`));

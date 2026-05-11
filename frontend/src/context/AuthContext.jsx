@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }) => {
 
     const markOnline = async () => {
       if (user?.id) {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+        const API_URL = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
         await fetch(`${API_URL}/auth/users/${user.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }) => {
     // Marcar como offline ao fechar a aba/navegador
     const handleUnload = () => {
       if (user?.id) {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+        const API_URL = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
         const url = `${API_URL}/auth/users/${user.id}`;
         const data = JSON.stringify({ status: 'offline', isOnline: false });
         

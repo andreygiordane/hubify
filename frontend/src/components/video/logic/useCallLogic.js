@@ -95,23 +95,26 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   useEffect(() => {
     if (!socket) return;
 
-    const onParticipants = updated => {
+
+    socket.off('room-participants');
+    socket.on('room-participants', updated => {
       setRoomParticipants(updated);
       setStreams(prev => {
         const next = { ...prev };
         let changed = false;
         Object.keys(next).forEach(sid => {
           const p = updated.find(part => part.socketId === sid);
-          if (next[sid].screen && (!p || !p.isScreenSharing)) {
+          if (next[sid]?.screen && (!p || !p.isScreenSharing)) {
             next[sid] = { ...next[sid], screen: null };
             changed = true;
           }
         });
         return changed ? next : prev;
       });
-    };
+    });
 
-    const onReceiveChat = msg => {
+    socket.off('receive-chat');
+    socket.on('receive-chat', msg => {
       const isSelf = msg.sender === currentUser.name;
       setMessages(prev => [...prev, {
         sender: msg.sender,
@@ -119,52 +122,41 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isSelf
       }]);
-    };
+    });
 
-    const onCallEnded = () => onLeave();
+    socket.off('call-ended');
+    socket.on('call-ended', () => onLeave());
 
-    const onAllUsers = users => {
-      console.log(`[Socket] Recebida lista de usuários (${users.length}):`, users);
-      users.forEach(id => {
-        if (peersRef.current.find(p => p.peerID === id)) return;
-        const peer = createPeer(id, socket.id, localStreamRef.current);
-        peer.on("stream", s => {
-          console.log(`[WebRTC] Stream recebido de ${id}`);
-          setStreams(prev => ({ ...prev, [id]: { ...(prev[id] || {}), webcam: s } }));
-        });
-        peersRef.current.push({ peerID: id, peer });
-      });
-    };
+    socket.off('user-connected');
+    socket.on('user-connected', userId => {
+      if (peersRef.current.find(p => p.peerID === userId)) return;
+      console.log(`[Socket] Novo usuário na sala: ${userId}. Iniciando conexão...`);
+      const peer = createPeer(userId, socket.id, localStreamRef.current);
+      peersRef.current.push({ peerID: userId, peer });
+    });
 
-    const onUserJoined = payload => {
-      console.log(`[Socket] Sinal recebido de ${payload.callerID}`);
-      const existingPeer = peersRef.current.find(p => p.peerID === payload.callerID);
-      if (existingPeer) {
-        try {
-          existingPeer.peer.signal(payload.signal);
-        } catch (e) { console.warn("[WebRTC] Erro ao sinalizar peer existente:", e.message); }
-      } else {
-        const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
-        peer.on("stream", s => {
-          console.log(`[WebRTC] Stream recebido de ${payload.callerID} (via user-joined)`);
-          setStreams(prev => ({ ...prev, [payload.callerID]: { ...(prev[payload.callerID] || {}), webcam: s } }));
-        });
-        peersRef.current.push({ peerID: payload.callerID, peer });
+    socket.off('user-joined');
+    socket.on("user-joined", payload => {
+      const existing = peersRef.current.find(p => p.peerID === payload.callerID);
+      if (existing) {
+        console.log(`[Socket] Sinal recebido para conexão existente: ${payload.callerID}`);
+        existing.peer.signal(payload.signal);
+        return;
       }
-    };
+      console.log(`[Socket] Sinal recebido de ${payload.callerID}. Respondendo...`);
+      const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
+      peersRef.current.push({ peerID: payload.callerID, peer });
+    });
 
-    const onReturnSignal = p => {
-      const item = peersRef.current.find(i => i.peerID === p.id);
-      if (item) {
-        try {
-          item.peer.signal(p.signal);
-        } catch (e) { console.warn("[WebRTC] Erro ao sinalizar peer retornado:", e.message); }
-      }
-    };
+    socket.off('receiving-returned-signal');
+    socket.on("receiving-returned-signal", payload => {
+      const item = peersRef.current.find(p => p.peerID === payload.id);
+      if (item) item.peer.signal(payload.signal);
+    });
 
-    const onUserDisconnected = userId => {
+    socket.off('user-disconnected');
+    socket.on('user-disconnected', userId => {
       console.log(`[Socket] Usuário saiu:`, userId);
-      setRoomParticipants(prev => prev.filter(p => p.socketId !== userId));
       const peerObj = peersRef.current.find(p => p.peerID === userId);
       if (peerObj) {
         peerObj.peer.destroy();
@@ -175,26 +167,18 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         delete next[userId];
         return next;
       });
-    };
-
-    socket.on('room-participants', onParticipants);
-    socket.on('receive-chat', onReceiveChat);
-    socket.on('call-ended', onCallEnded);
-    socket.on('all-users', onAllUsers);
-    socket.on('user-joined', onUserJoined);
-    socket.on('receiving-returned-signal', onReturnSignal);
-    socket.on('user-disconnected', onUserDisconnected);
+    });
 
     return () => {
-      socket.off('room-participants', onParticipants);
-      socket.off('receive-chat', onReceiveChat);
-      socket.off('call-ended', onCallEnded);
-      socket.off('all-users', onAllUsers);
-      socket.off('user-joined', onUserJoined);
-      socket.off('receiving-returned-signal', onReturnSignal);
-      socket.off('user-disconnected', onUserDisconnected);
+      socket.off('room-participants');
+      socket.off('receive-chat');
+      socket.off('call-ended');
+      socket.off('user-connected');
+      socket.off('user-joined');
+      socket.off('receiving-returned-signal');
+      socket.off('user-disconnected');
     };
-  }, [socket]);
+  }, [socket, roomId, currentUser, onLeave]);
 
   useEffect(() => {
     if (socket && roomId) {
@@ -214,15 +198,18 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     }
   }, [roomParticipants, roomId, hasConnected, onLeave]);
   */
+  const isInitializingMedia = useRef(false);
   const initMedia = async () => {
-    if (!socket || !socket.connected) return;
+    if (!socket || !socket.connected || isInitializingMedia.current || localStreamRef.current) return;
 
+    isInitializingMedia.current = true;
     console.log(`[Media] Obtendo mídia local na sala: ${roomId}`);
 
     // Tentar obter Media (Async)
     navigator.mediaDevices.getUserMedia({ video: !isVoiceMode, audio: true })
       .then(stream => {
         console.log(`[Media] Local stream obtido com sucesso`);
+        localStreamRef.current = stream;
         setLocalStream(stream);
         setCameraStream(stream);
         // Adicionar o stream a todos os peers já conectados
@@ -232,6 +219,9 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       })
       .catch(err => {
         console.error(`[Media] Erro ao obter stream local:`, err);
+      })
+      .finally(() => {
+        isInitializingMedia.current = false;
       });
   };
 
@@ -240,6 +230,10 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     peer.on("signal", signal => {
       socket.emit("sending-signal", { userToSignal, callerID, signal });
     });
+    peer.on("stream", s => {
+      console.log(`[WebRTC] Stream recebido de ${userToSignal}`);
+      setStreams(prev => ({ ...prev, [userToSignal]: { ...(prev[userToSignal] || {}), webcam: s } }));
+    });
     return peer;
   };
 
@@ -247,6 +241,10 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     const peer = new Peer({ initiator: false, stream });
     peer.on("signal", signal => {
       socket.emit("returning-signal", { signal, callerID });
+    });
+    peer.on("stream", s => {
+      console.log(`[WebRTC] Stream recebido de ${callerID}`);
+      setStreams(prev => ({ ...prev, [callerID]: { ...(prev[callerID] || {}), webcam: s } }));
     });
     peer.signal(incomingSignal);
     return peer;
@@ -350,7 +348,14 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     });
   }
 
-  const allParticipants = participantsList;
+  // Deduplicar por id e preferir entradas que possuam stream (evita tile de avatar + tile de stream do mesmo usuário)
+  const participantsMap = new Map();
+  participantsList.forEach(p => {
+    const existing = participantsMap.get(p.id);
+    if (!existing) participantsMap.set(p.id, p);
+    else if (!existing.stream && p.stream) participantsMap.set(p.id, p);
+  });
+  const allParticipants = Array.from(participantsMap.values());
 
   // Adicionar telas compartilhadas como participantes virtuais
   if (screenSharing && screenStream && screenStream.active) {

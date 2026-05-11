@@ -92,6 +92,35 @@ function MobileVoiceUI({ stream, isMicOn, time, participantName, participantAvat
   );
 }
 
+function RemoteAudio({ stream, id }) {
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (audioRef.current && stream) {
+      console.log(`[Audio] Atachando stream ao elemento de áudio do peer: ${id}`);
+      audioRef.current.srcObject = stream;
+      
+      const playAudio = () => {
+        audioRef.current.play().catch(err => {
+          console.warn(`[Audio] Erro ao dar play automático para ${id}:`, err);
+        });
+      };
+
+      // Tentar tocar após um pequeno delay para garantir que o elemento está pronto
+      playAudio();
+    }
+  }, [stream, id]);
+
+  return (
+    <audio
+      ref={audioRef}
+      autoPlay
+      playsInline
+      style={{ display: 'none' }}
+    />
+  );
+}
+
 export default function AudioCallInterface({ roomId, currentUser, socket, onLeave }) {
   const { users, statusConfig, handleInviteToCall } = useChat();
   const {
@@ -115,15 +144,8 @@ export default function AudioCallInterface({ roomId, currentUser, socket, onLeav
   
   return (
     <div className="h-dynamic-screen w-full bg-[#0a0d14] flex flex-col relative overflow-hidden">
-      {allParticipants.filter(p => !p.isLocal).map(p => (
-         <audio key={p.id} autoPlay playsInline ref={el => {
-           if (el && p.stream && el.srcObject !== p.stream) {
-             el.srcObject = p.stream;
-             if (typeof el.play === 'function') {
-               el.play().catch(() => {});
-             }
-           }
-         }} />
+      {allParticipants.filter(p => !p.isLocal && p.stream).map(p => (
+         <RemoteAudio key={p.id} stream={p.stream} id={p.id} />
       ))}
       
       <header className="px-8 py-5 flex justify-center items-center z-40 shrink-0">

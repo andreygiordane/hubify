@@ -6,7 +6,17 @@ export class Peer {
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com' }
+        { urls: 'stun:stun.services.mozilla.com' },
+        // Servidores TURN Gratuitos (OpenRelay)
+        {
+          urls: [
+            "turn:openrelay.metered.ca:80",
+            "turn:openrelay.metered.ca:443",
+            "turn:openrelay.metered.ca:443?transport=tcp"
+          ],
+          username: "openrelayproject",
+          credential: "openrelayproject",
+        },
       ],
       iceCandidatePoolSize: 10
     });
@@ -67,17 +77,11 @@ export class Peer {
     if (!data) return;
     
     // Proteção contra sinais duplicados ou fora de ordem
-    if (data.type === 'answer' && this._pc.signalingState === 'stable') {
-      console.warn('[WebRTC] Ignorando answer: conexão já está estável');
-      return;
-    }
-    if (data.type === 'offer' && this._pc.signalingState !== 'stable') {
-      console.warn('[WebRTC] Ignorando offer: conexão já está processando outro sinal');
-      return;
-    }
-
     if (data.type === 'offer' || data.type === 'answer') {
       try { console.log('[WebRTC] signal() processando:', data.type, 'Estado:', this._pc.signalingState); } catch(e) {}
+      
+      // Se recebermos uma oferta e já tivermos uma oferta local pendente (Glare), o RTCPeerConnection cuidará disso
+      // Mas para evitar erros de estado, vamos apenas processar se for compatível
       this._pc.setRemoteDescription(new RTCSessionDescription(data))
         .then(() => {
           // Process queued candidates
@@ -119,13 +123,14 @@ export class Peer {
       this._pc.addTrack(track, stream);
     });
 
-    // Trigger re-negotiation
-    this._pc.createOffer().then(offer => {
-      try { console.log('[WebRTC] addStream created offer sdpLen=', offer.sdp ? offer.sdp.length : 0); } catch(e) {}
-      return this._pc.setLocalDescription(offer).then(() => {
-        this.emit("signal", offer);
-      });
-    }).catch(err => console.error("Error creating offer during addStream:", err));
+    if (this._pc.signalingState === 'stable') {
+      console.log('[WebRTC] Renegociando para novo stream...');
+      this._pc.createOffer().then(offer => {
+        return this._pc.setLocalDescription(offer).then(() => {
+          this.emit("signal", offer);
+        });
+      }).catch(err => console.error("[WebRTC] Erro ao renegociar addStream:", err));
+    }
   }
 
   removeStream(stream) {

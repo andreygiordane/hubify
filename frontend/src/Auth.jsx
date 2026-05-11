@@ -67,7 +67,7 @@ export default function Auth({ onLogin }) {
     setLoading(true);
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
       const base = apiUrl || '';
       let payload = formData;
       if (isLogin) {
@@ -118,7 +118,7 @@ export default function Auth({ onLogin }) {
 
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
       const res = await fetch(`${apiUrl}/auth/users/${mustUpdateUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

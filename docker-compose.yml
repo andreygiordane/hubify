@@ -24,9 +24,9 @@ services:
       - "8082:8081"
     environment:
       - PORT=8081
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/hubify
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://136.115.245.229:5432/hubify
       - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_DATASOURCE_PASSWORD=951405An@
     depends_on:
       db:
         condition: service_healthy
@@ -44,8 +44,8 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:8082/api
-        VITE_SOCKET_URL: http://localhost:8080
+        VITE_API_URL: https://hubify-backend-358184322842.us-central1.run.app/api
+        VITE_SOCKET_URL: https://hubify-video-server-358184322842.us-central1.run.app
     container_name: hubify-frontend
     ports:
       - "5173:8080"

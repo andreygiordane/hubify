@@ -7,7 +7,7 @@ import {
 import { useAuth } from './AuthContext';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://hubify-video-server-358184322842.us-central1.run.app';
 const SOCKET_OPTIONS = { 
   transports: ['polling', 'websocket'],
   reconnectionAttempts: 10,
@@ -1150,7 +1150,20 @@ export const ChatProvider = ({ children }) => {
           setActiveDMs(newDMs);
           await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(newDMs) }, { merge: true });
 
-          // Não emitir evento de deleção global — apenas esconder localmente
+          // Apagar mensagens da DM do banco para que a exclusão seja permanente
+          try {
+            const { docs } = await fetchCollection(`artifacts/${appId}/public/data/messages`);
+            const msgs = docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.roomId === roomId);
+            if (msgs.length > 0) {
+              await Promise.all(msgs.map(m => removeDocument(`artifacts/${appId}/public/data/messages/${m.id}`)));
+            }
+            if (socketRef.current) {
+              socketRef.current.emit('conversation-deleted', { roomId, deletedBy: user.id, deletedAt: Date.now() });
+            }
+          } catch (e) {
+            console.error('Erro ao apagar mensagens da DM:', e);
+          }
+
           processingDeletions.current.delete(roomId);
         } else {
           // Para grupos: verificar se usuário é admin (apagar para todos) ou apenas sair do grupo

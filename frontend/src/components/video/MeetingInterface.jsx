@@ -6,6 +6,8 @@ import {
   Users, MessageSquare, UserPlus, Signal, 
   Smile, Send, X, Check, Copy, EyeOff, Eye, Hand, Search
 } from "lucide-react";
+import AudioCallInterface from './audio/AudioCallInterface';
+import VideoCallInterface from './video/VideoCallInterface';
 
 // Wrapper Nativo do WebRTC
 class Peer {
@@ -335,11 +337,14 @@ function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fa
     if (ref.current && stream) { ref.current.srcObject = stream; }
   }, [stream]);
 
+  // Considerar que stream pode existir mas o track de vídeo estar desabilitado.
+  const hasVideo = !!(stream && stream.getVideoTracks && stream.getVideoTracks().some(t => t.kind === 'video' && t.enabled));
+
   return (
-    <div className={`relative w-full h-full rounded-[24px] overflow-hidden bg-[#1e232e] border-2 transition-all duration-300 shadow-lg 
+    <div className={`relative w-full h-full rounded-[24px] overflow-hidden bg-[#1e232e] border-2 transition-all duration-300 shadow-lg group
       ${handRaised ? 'border-orange-500 ring-4 ring-orange-500/20' : isSpeaking ? 'border-indigo-500' : 'border-transparent'}`}>
       
-      {stream ? (
+      {hasVideo ? (
         <video ref={ref} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full object-cover`} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-gray-800">
@@ -484,6 +489,10 @@ function BottomControls({
        {!isMobileView && !isVoiceMode && (
          <button onClick={shareScreen} className={`p-3 flex-shrink-0 rounded-full transition-colors ${screenSharing ? 'bg-[#25d366] text-[#0a0d14]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><MonitorUp size={20}/></button>
        )}
+
+       {isMobileView && !isVoiceMode && (
+         <button onClick={shareScreen} className={`p-3 flex-shrink-0 rounded-full transition-colors ${screenSharing ? 'bg-[#25d366] text-[#0a0d14]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><MonitorUp size={20}/></button>
+       )}
        
        {!isVoiceMode && (
          <button onClick={toggleHand} className={`p-3 flex-shrink-0 rounded-full transition-colors ${isHandRaised ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]' : 'bg-[#3c404b] text-white hover:bg-gray-500'}`}><Hand size={20}/></button>
@@ -496,6 +505,92 @@ function BottomControls({
        <div className="w-px h-8 bg-gray-700 mx-1 flex-shrink-0"></div>
        
        <button onClick={onLeave} className="p-2.5 sm:p-3 flex-shrink-0 bg-[#ea4335] hover:bg-red-700 text-white rounded-full transition-all shadow-[0_4px_14px_rgba(234,67,53,0.4)]"><PhoneOff size={20}/></button>
+    </div>
+  );
+}
+
+function MobileScreenShareView({ 
+  localStream, cameraStream, allParticipants, 
+  isScreenShareFullscreen, setIsScreenShareFullscreen,
+  isHandRaised, isMicOn
+}) {
+  return (
+    <div className="w-full h-full flex flex-col relative bg-black">
+      {/* Screen Share - Parte Principal */}
+      <div 
+        className="flex-1 relative bg-black rounded-b-3xl overflow-hidden flex items-center justify-center cursor-pointer group"
+        onClick={() => setIsScreenShareFullscreen(!isScreenShareFullscreen)}
+      >
+        <video 
+          autoPlay 
+          playsInline 
+          className="w-full h-full object-contain" 
+          ref={el => { if (el && localStream) el.srcObject = localStream }} 
+        />
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-white text-sm">
+            Toque para {isScreenShareFullscreen ? 'minimizar' : 'ampliar'}
+          </div>
+        </div>
+      </div>
+
+      {/* Webcams em Baixo - Grid Horizontal Scrollável */}
+      {!isScreenShareFullscreen && (
+        <div className="h-32 bg-black/80 border-t border-gray-800 p-2 overflow-x-auto overflow-y-hidden">
+          <div className="flex gap-2 h-full pb-2">
+            {allParticipants.map(p => (
+              <div 
+                key={p.id} 
+                className={`w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${
+                  p.isLocal 
+                    ? 'border-indigo-500' 
+                    : isHandRaised && p.isLocal ? 'border-orange-500 ring-2 ring-orange-500/50' 
+                    : 'border-gray-700 hover:border-gray-600'
+                }`}
+              >
+                <video 
+                  autoPlay 
+                  muted={p.isLocal}
+                  playsInline 
+                  className="w-full h-full object-cover" 
+                  ref={el => { if (el && p.stream) el.srcObject = p.stream }} 
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Mode - Mostrar Grid de Participants Maior */}
+      {isScreenShareFullscreen && (
+        <div className="absolute inset-0 z-40 bg-black flex flex-col">
+          <button 
+            onClick={() => setIsScreenShareFullscreen(false)}
+            className="absolute top-4 right-4 z-50 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white p-2 rounded-full transition-colors"
+          >
+            <X size={24} />
+          </button>
+          <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 gap-2">
+            {allParticipants.map(p => (
+              <div 
+                key={p.id} 
+                className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-square"
+              >
+                <video 
+                  autoPlay 
+                  muted={p.isLocal}
+                  playsInline 
+                  className="w-full h-full object-cover" 
+                  ref={el => { if (el && p.stream) el.srcObject = p.stream }} 
+                />
+                <div className="absolute bottom-2 left-2 text-xs font-medium text-white bg-black/60 px-2 py-1 rounded-full truncate">
+                  {p.isLocal ? 'Você' : p.name}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -539,7 +634,6 @@ export default function MeetingInterface({
     };
   }, []);
 
-<<<<<<< HEAD
   return callType === 'audio' ? (
     <AudioCallInterface 
       roomId={roomId} 
@@ -555,7 +649,7 @@ export default function MeetingInterface({
       callType={callType}
       onLeave={onLeave} 
     />
-=======
+  );
   
   // Transforma callType 'audio' em voice mode automaticamente
   const isVoiceMode = callType === 'audio'; 
@@ -567,7 +661,8 @@ export default function MeetingInterface({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isPeopleOpen, setIsPeopleOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [isCamHidden, setIsCamHidden] = useState(false); 
+  const [isCamHidden, setIsCamHidden] = useState(false);
+  const [isScreenShareFullscreen, setIsScreenShareFullscreen] = useState(false); 
 
   const [messages, setMessages] = useState([{ sender: 'Sistema', text: `Você entrou na sala!`, time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), isSelf: false }]);
   const [roomParticipants, setRoomParticipants] = useState([]);
@@ -586,37 +681,46 @@ export default function MeetingInterface({
   }, [roomParticipants, roomId, hasConnected, onLeave]);
 
   // Synchronize internal state with server room-participants
-  const allParticipants = [
-    { 
-      id: socket?.id || 'local', 
-      stream: localStream, 
-      isLocal: true, 
-      name: currentUser?.name || 'Você (Eu)', 
-      avatarUrl: currentUser?.avatarUrl,
-      handRaised: isHandRaised, 
-      isMicOn, 
-      isCamOn: isVideoOn 
-    },
-    ...Object.entries(streams).map(([socketId, stream]) => {
-       const serverState = roomParticipants.find(p => p.socketId === socketId);
-       return {
-         id: socketId, 
-         stream, 
-         isLocal: false, 
-         name: serverState?.name || `Convidado ${socketId.substring(0,4)}`, 
-         avatarUrl: serverState?.avatarUrl,
-         handRaised: serverState?.isHandRaised || false,
-         isMicOn: serverState?.isMicOn ?? true,
-         isCamOn: serverState?.isCamOn ?? true
-       };
-    })
-  ];
+  // Build participants map and deduplicate entries by id.
+  const participantsMap = new Map();
+  const localId = socket?.id || 'local';
+  participantsMap.set(localId, {
+    id: localId,
+    stream: localStream,
+    isLocal: true,
+    name: currentUser?.name || 'Você (Eu)',
+    avatarUrl: currentUser?.avatarUrl,
+    handRaised: isHandRaised,
+    isMicOn,
+    isCamOn: isVideoOn
+  });
 
-  const getGridClasses = (count) => {
+  Object.entries(streams).forEach(([socketId, stream]) => {
+    const serverState = roomParticipants.find(p => p.socketId === socketId);
+    const entry = {
+      id: socketId,
+      stream,
+      isLocal: false,
+      name: serverState?.name || `Convidado ${socketId.substring(0,4)}`,
+      avatarUrl: serverState?.avatarUrl,
+      handRaised: serverState?.isHandRaised || false,
+      isMicOn: serverState?.isMicOn ?? true,
+      isCamOn: serverState?.isCamOn ?? true
+    };
+
+    const existing = participantsMap.get(socketId);
+    // Prefer entries that have an actual stream (especially with video) over placeholders
+    if (!existing) participantsMap.set(socketId, entry);
+    else if (!existing.stream && entry.stream) participantsMap.set(socketId, entry);
+  });
+
+  const allParticipants = Array.from(participantsMap.values());
+
+  const getGridClasses = (count, isMobile) => {
     if (count === 1) return "grid-cols-1 grid-rows-1 max-w-4xl mx-auto";
-    if (count === 2) return "grid-cols-1 md:grid-cols-2 grid-rows-1";
-    if (count <= 4) return "grid-cols-2 grid-rows-2";
-    return "grid-cols-2 lg:grid-cols-3 grid-rows-2";
+    if (count === 2) return isMobile ? "grid-cols-1 grid-rows-2" : "grid-cols-1 md:grid-cols-2 grid-rows-1";
+    if (count <= 4) return isMobile ? "grid-cols-2 grid-rows-2" : "grid-cols-2 grid-rows-2";
+    return isMobile ? "grid-cols-2 grid-rows-auto" : "grid-cols-2 lg:grid-cols-3 grid-rows-2";
   };
 
   const activeRemote = allParticipants.length > 1 ? allParticipants[1] : null;
@@ -625,6 +729,11 @@ export default function MeetingInterface({
     const timer = setInterval(() => setTime(t => t + 1), 1000);
     const handleResize = () => setWindowIsMobile(checkIsMobileWindow());
     window.addEventListener("resize", handleResize);
+    
+    // Reset fullscreen mode when screen sharing ends
+    if (!screenSharing && isScreenShareFullscreen) {
+      setIsScreenShareFullscreen(false);
+    }
     
     return () => {
       clearInterval(timer);
@@ -642,7 +751,7 @@ export default function MeetingInterface({
         cameraStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [localStream, cameraStream]);
+  }, [localStream, cameraStream, screenSharing, isScreenShareFullscreen]);
 
   // Efeito separado para inicializar mídia e socket quando ambos estiverem prontos
   useEffect(() => {
@@ -869,44 +978,45 @@ export default function MeetingInterface({
       <div className="flex-1 flex overflow-hidden relative px-4 sm:px-8 pb-20">
         <div className={`flex-1 transition-all duration-300 relative ${(isChatOpen || isPeopleOpen) && !windowIsMobile ? 'mr-80' : ''}`}>
            
-           {screenSharing ? (
-             windowIsMobile ? (
-                 <div className="w-full h-full relative bg-black rounded-3xl overflow-hidden flex items-center justify-center border-4 border-[#25d366]/30 shadow-2xl">
-                    <video autoPlay playsInline className="w-full h-full object-contain bg-black" ref={el => { if (el) el.srcObject = localStream }} />
-                    <div className="absolute bottom-6 right-6 z-30">
-                        <div className={`w-32 aspect-[3/4] bg-[#1e232e] rounded-2xl overflow-hidden border-2 transition-all ${isHandRaised ? 'border-orange-500' : 'border-[#11141c]'}`}>
-                           <video autoPlay muted playsInline className="w-full h-full object-cover" ref={el => { if (el) el.srcObject = cameraStream }} />
-                           {isHandRaised && <Hand size={16} className="absolute top-2 right-2 text-orange-500 fill-orange-500" />}
+           {/* Screen Sharing - Mobile: fullscreen with participants below / Desktop: side-by-side */}
+           {screenSharing && windowIsMobile && (
+             <MobileScreenShareView 
+               localStream={localStream}
+               cameraStream={cameraStream}
+               allParticipants={allParticipants}
+               isScreenShareFullscreen={isScreenShareFullscreen}
+               setIsScreenShareFullscreen={setIsScreenShareFullscreen}
+               isHandRaised={isHandRaised}
+               isMicOn={isMicOn}
+             />
+           )}
+
+           {screenSharing && !windowIsMobile ? (
+             <div className="w-full h-full flex gap-4">
+                <div className="flex-1 relative bg-black rounded-[24px] overflow-hidden flex items-center justify-center border-4 border-[#25d366]/30 shadow-xl">
+                   <video autoPlay playsInline className="w-full h-full object-contain" ref={el => { if (el) el.srcObject = localStream }} />
+                </div>
+                {!isCamHidden && (
+                    <div className="w-64 flex flex-col gap-3 h-full">
+                        <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-3 pr-1">
+                            {allParticipants.map(p => (
+                               <div key={p.id} className="w-full aspect-video flex-shrink-0">
+                                  <DesktopVideoTile stream={p.stream} name={p.name} avatarUrl={p.avatarUrl} isLocal={p.isLocal} muted={p.isLocal ? !isMicOn : false} handRaised={p.handRaised} />
+                               </div>
+                            ))}
                         </div>
-                    </div>
-                 </div>
-             ) : (
-                 <div className="w-full h-full flex gap-4">
-                    <div className="flex-1 relative bg-black rounded-[24px] overflow-hidden flex items-center justify-center border-4 border-[#25d366]/30 shadow-xl">
-                       <video autoPlay playsInline className="w-full h-full object-contain" ref={el => { if (el) el.srcObject = localStream }} />
-                    </div>
-                    {!isCamHidden && (
-                        <div className="w-64 flex flex-col gap-3 h-full">
-                            <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-3 pr-1">
-                                {allParticipants.map(p => (
-                                   <div key={p.id} className="w-full aspect-video flex-shrink-0">
-                                      <DesktopVideoTile stream={p.stream} name={p.name} avatarUrl={p.avatarUrl} isLocal={p.isLocal} muted={p.isLocal ? !isMicOn : false} handRaised={p.handRaised} />
-                                   </div>
-                                ))}
-                            </div>
-                            <button onClick={() => setIsCamHidden(true)} className="bg-[#1e232e] text-gray-300 text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-700 shadow-lg shrink-0 transition-colors">
-                                <EyeOff size={14} /> Ocultar webcams
-                            </button>
-                        </div>
-                    )}
-                    {isCamHidden && (
-                        <button onClick={() => setIsCamHidden(false)} className="absolute bottom-6 right-6 z-50 bg-[#1e232e] text-gray-300 text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-700 shadow-[0_10px_30px_rgba(0,0,0,0.6)] transition-colors">
-                            <Eye size={14} /> Mostrar webcams
+                        <button onClick={() => setIsCamHidden(true)} className="bg-[#1e232e] text-gray-300 text-xs px-4 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-700 shadow-lg shrink-0 transition-colors">
+                            <EyeOff size={14} /> Ocultar webcams
                         </button>
-                    )}
-                 </div>
-             )
-           ) : allParticipants.length === 2 ? (
+                    </div>
+                )}
+                {isCamHidden && (
+                    <button onClick={() => setIsCamHidden(false)} className="absolute bottom-6 right-6 z-50 bg-[#1e232e] text-gray-300 text-xs px-5 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-gray-700 shadow-[0_10px_30px_rgba(0,0,0,0.6)] transition-colors">
+                        <Eye size={14} /> Mostrar webcams
+                    </button>
+                )}
+             </div>
+           ) : !screenSharing && allParticipants.length === 2 ? (
              <div className="w-full h-full relative rounded-[24px] overflow-hidden shadow-2xl bg-[#1e232e]">
                 <div className="absolute inset-0">
                    <DesktopVideoTile stream={allParticipants[1].stream} name={allParticipants[1].name} avatarUrl={allParticipants[1].avatarUrl} isLocal={false} muted={false} handRaised={allParticipants[1].handRaised} />
@@ -915,11 +1025,11 @@ export default function MeetingInterface({
                    <DesktopVideoTile stream={allParticipants[0].stream} name="Você" avatarUrl={allParticipants[0].avatarUrl} isLocal={true} muted={!isMicOn} handRaised={isHandRaised} />
                 </motion.div>
              </div>
-           ) : (
-             <div className={`w-full h-full grid gap-2 sm:gap-4 p-1 sm:p-2 ${getGridClasses(allParticipants.length)}`}>
+           ) : !screenSharing ? (
+             <div className={`w-full h-full grid gap-2 sm:gap-4 p-1 sm:p-2 ${getGridClasses(allParticipants.length, windowIsMobile)}`}>
                 {allParticipants.map(p => <DesktopVideoTile key={p.id} stream={p.stream} name={p.name} avatarUrl={p.avatarUrl} isLocal={p.isLocal} muted={p.isLocal ? !isMicOn : false} handRaised={p.handRaised} />)}
              </div>
-           )}
+           ) : null}
         </div>
         
         <ChatSidebar isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} messages={messages} sendMessage={handleSendMessage} isMobileView={windowIsMobile} />
@@ -939,6 +1049,5 @@ export default function MeetingInterface({
         onInvite={(u) => handleInviteToCall(u.id, roomId, callType)}
       />
     </div>
->>>>>>> 4df459069aea9d909152e8452c9b6e495d1cb634
   );
 }

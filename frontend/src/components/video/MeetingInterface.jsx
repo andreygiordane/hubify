@@ -514,38 +514,63 @@ function MobileScreenShareView({
   isScreenShareFullscreen, setIsScreenShareFullscreen,
   isHandRaised, isMicOn
 }) {
+  const [scale, setScale] = useState(1);
+  const screenSharer = allParticipants.find(p => p.isScreenSharing);
+  const otherParticipants = allParticipants.filter(p => !p.isScreenSharing);
+  
   return (
     <div className="w-full h-full flex flex-col relative bg-black">
-      {/* Screen Share - Parte Principal */}
-      <div 
-        className="flex-1 relative bg-black rounded-b-3xl overflow-hidden flex items-center justify-center cursor-pointer group"
-        onClick={() => setIsScreenShareFullscreen(!isScreenShareFullscreen)}
-      >
-        <video 
-          autoPlay 
-          playsInline 
-          className="w-full h-full object-contain" 
-          ref={el => { if (el && localStream) el.srcObject = localStream }} 
-        />
-        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full text-white text-sm">
-            Toque para {isScreenShareFullscreen ? 'minimizar' : 'ampliar'}
+      {!isScreenShareFullscreen ? (
+        <>
+          {/* Screen Share Principal - Toca para Ampliar */}
+          <div 
+            className="flex-[3] relative bg-black overflow-hidden flex items-center justify-center cursor-pointer group active:scale-95 transition-transform"
+            onClick={() => setIsScreenShareFullscreen(true)}
+          >
+            <video 
+              autoPlay 
+              playsInline 
+              className="w-full h-full object-contain" 
+              ref={el => { if (el && localStream) el.srcObject = localStream }} 
+            />
+            {/* Overlay - Toque para Ampliar */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <div className="bg-white/20 backdrop-blur-md px-6 py-3 rounded-full text-white font-medium">
+                🔍 Toque para Ampliar
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Webcams em Baixo - Grid Horizontal Scrollável */}
-      {!isScreenShareFullscreen && (
-        <div className="h-32 bg-black/80 border-t border-gray-800 p-2 overflow-x-auto overflow-y-hidden">
-          <div className="flex gap-2 h-full pb-2">
-            {allParticipants.map(p => (
+          {/* Webcams em Baixo - Mostrar screenSharer + Others */}
+          <div className="flex-1 min-h-[140px] bg-black/90 border-t border-gray-700/50 flex items-center overflow-x-auto overflow-y-hidden px-3 gap-3 py-3 no-scrollbar">
+            {/* Webcam de quem tá compartilhando (destaque) */}
+            {screenSharer && (
+              <div className="w-36 h-32 flex-shrink-0 rounded-xl overflow-hidden border-2 border-blue-500 shadow-lg shadow-blue-500/30 relative group">
+                <video 
+                  autoPlay 
+                  muted={screenSharer.isLocal}
+                  playsInline 
+                  className="w-full h-full object-cover" 
+                  ref={el => { if (el && screenSharer.stream) el.srcObject = screenSharer.stream }} 
+                />
+                <div className="absolute top-2 left-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded-md">
+                  🎬 Compartilhando
+                </div>
+                <div className="absolute bottom-2 left-2 text-xs font-medium text-white bg-black/70 px-2 py-1 rounded-full">
+                  {screenSharer.isLocal ? 'Você' : screenSharer.name}
+                </div>
+              </div>
+            )}
+
+            {/* Outros participantes */}
+            {otherParticipants.map(p => (
               <div 
                 key={p.id} 
-                className={`w-28 h-28 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${
+                className={`w-32 h-28 flex-shrink-0 rounded-xl overflow-hidden border-2 transition-all ${
                   p.isLocal 
-                    ? 'border-indigo-500' 
-                    : isHandRaised && p.isLocal ? 'border-orange-500 ring-2 ring-orange-500/50' 
-                    : 'border-gray-700 hover:border-gray-600'
+                    ? 'border-indigo-500 shadow-lg shadow-indigo-500/30'
+                    : isHandRaised && p.isLocal ? 'border-orange-500 shadow-lg shadow-orange-500/30' 
+                    : 'border-gray-600'
                 }`}
               >
                 <video 
@@ -555,26 +580,72 @@ function MobileScreenShareView({
                   className="w-full h-full object-cover" 
                   ref={el => { if (el && p.stream) el.srcObject = p.stream }} 
                 />
+                <div className="absolute bottom-1 left-1 text-[10px] font-medium text-white bg-black/70 px-1.5 py-0.5 rounded truncate">
+                  {p.isLocal ? 'Você' : p.name}
+                </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Fullscreen Mode - Mostrar Grid de Participants Maior */}
-      {isScreenShareFullscreen && (
+        </>
+      ) : (
+        /* Modo Fullscreen - Zoom até 3x */
         <div className="absolute inset-0 z-40 bg-black flex flex-col">
-          <button 
-            onClick={() => setIsScreenShareFullscreen(false)}
-            className="absolute top-4 right-4 z-50 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white p-2 rounded-full transition-colors"
-          >
-            <X size={24} />
-          </button>
-          <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 gap-2">
+          {/* Header com Zoom Controls */}
+          <div className="shrink-0 flex items-center justify-between p-4 bg-black/60 backdrop-blur-md border-b border-gray-700/50">
+            <button 
+              onClick={() => setIsScreenShareFullscreen(false)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors text-sm font-medium"
+            >
+              ← Voltar
+            </button>
+            
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setScale(s => Math.max(s - 0.5, 1))}
+                disabled={scale === 1}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white transition-colors"
+              >
+                −
+              </button>
+              <span className="text-sm font-medium text-white w-12 text-center">{scale.toFixed(1)}x</span>
+              <button 
+                onClick={() => setScale(s => Math.min(s + 0.5, 3))}
+                disabled={scale === 3}
+                className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          {/* Screen Share Fullscreen com Zoom */}
+          <div className="flex-1 relative overflow-hidden bg-black flex items-center justify-center group">
+            <motion.div
+              className="w-full h-full flex items-center justify-center"
+              style={{ scale }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            >
+              <video 
+                autoPlay 
+                playsInline 
+                className="w-full h-full object-contain" 
+                ref={el => { if (el && localStream) el.srcObject = localStream }} 
+              />
+            </motion.div>
+
+            {/* Info Badge */}
+            <div className="absolute top-4 left-4 bg-white/10 backdrop-blur-md px-3 py-2 rounded-lg text-white text-xs">
+              <div className="font-bold">📺 Tela Compartilhada</div>
+              <div className="text-white/70">{screenSharer?.name || 'Participante'}</div>
+            </div>
+          </div>
+
+          {/* Participantes em Grid - Fullscreen */}
+          <div className="shrink-0 h-24 bg-black/90 border-t border-gray-700/50 overflow-x-auto px-3 py-2 flex gap-2 no-scrollbar">
             {allParticipants.map(p => (
               <div 
-                key={p.id} 
-                className="relative bg-gray-900 rounded-2xl overflow-hidden aspect-square"
+                key={p.id}
+                className="w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden border border-gray-600"
               >
                 <video 
                   autoPlay 
@@ -583,9 +654,6 @@ function MobileScreenShareView({
                   className="w-full h-full object-cover" 
                   ref={el => { if (el && p.stream) el.srcObject = p.stream }} 
                 />
-                <div className="absolute bottom-2 left-2 text-xs font-medium text-white bg-black/60 px-2 py-1 rounded-full truncate">
-                  {p.isLocal ? 'Você' : p.name}
-                </div>
               </div>
             ))}
           </div>

@@ -18,8 +18,12 @@ export default function Sidebar() {
     <>
       {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 bg-slate-900 flex-col h-full shrink-0 transition-all duration-300">
-        <div className="p-6 flex items-center">
+        <div className="p-6 flex items-center gap-2">
           <img src="/image/logo.png" alt="Hubify" className="h-10 w-auto object-contain" />
+          <div className="flex flex-col">
+            <span className="text-lg font-bold italic text-white">Hubify</span>
+            <span className="text-xs font-semibold text-indigo-400 tracking-wide">Workspace</span>
+          </div>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2">

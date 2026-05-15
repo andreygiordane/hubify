@@ -244,7 +244,7 @@ const Calendar = () => {
                                       const u = users.find(x => x.id === pId);
                                       return (
                                         <div key={i} className="w-7 h-7 rounded-full bg-white border border-slate-100 shadow-sm overflow-hidden" title={u?.name}>
-                                          <img src={u?.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} alt="Avatar" />
+                                          <img src={u?.avatarUrl || "/image/sem_foto.avif"} alt="Avatar" />
                                         </div>
                                       );
                                     })}

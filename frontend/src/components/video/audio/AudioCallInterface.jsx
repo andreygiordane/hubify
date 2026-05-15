@@ -157,7 +157,7 @@ export default function AudioCallInterface({ roomId, currentUser, socket, onLeav
         isMicOn={isMicOn} 
         time={time} 
         participantName={activeRemote?.name || "Aguardando convidados..."} 
-        participantAvatar={activeRemote?.avatarUrl || currentUser.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+        participantAvatar={activeRemote?.avatarUrl || currentUser.avatarUrl || "/image/sem_foto.avif"} 
       />
       
       <BottomControls 

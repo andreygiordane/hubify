@@ -18,12 +18,12 @@ export default function Sidebar() {
     <>
       {/* Desktop Sidebar */}
       <div className="hidden md:flex w-64 bg-slate-900 flex-col h-full shrink-0 transition-all duration-300">
-        <div className="p-6 flex items-center gap-2">
-          <img src="/image/logo.png" alt="Hubify" className="h-10 w-auto object-contain" />
-          <div className="flex flex-col">
-            <span className="text-lg font-bold italic text-white">Hubify</span>
-            <span className="text-xs font-semibold text-indigo-400 tracking-wide">Workspace</span>
-          </div>
+        <div className="p-6 flex items-center justify-center border-b border-slate-800/50 mb-2 pb-5">
+          <img 
+            src="/image/logo.png" 
+            alt="HubiFy Logo" 
+            className="h-12 w-auto object-contain"
+          />
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2">
@@ -62,7 +62,7 @@ export default function Sidebar() {
             >
               <div className="relative shrink-0">
                 <img 
-                  src={currentUserProfile?.avatarUrl || "/images/default-avatar.png"} 
+                  src={currentUserProfile?.avatarUrl || "/image/sem_foto.avif"} 
                   alt="Avatar" 
                   className="w-10 h-10 rounded-xl bg-slate-700 object-cover" 
                 />
@@ -125,7 +125,7 @@ export default function Sidebar() {
           >
             <div className="relative">
               <img 
-                src={currentUserProfile?.avatarUrl || "/images/default-avatar.png"} 
+                src={currentUserProfile?.avatarUrl || "/image/sem_foto.avif"} 
                 alt="Avatar" 
                 className="w-7 h-7 rounded-lg bg-slate-700 object-cover" 
               />

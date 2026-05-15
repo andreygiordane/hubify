@@ -7,7 +7,7 @@ import {
 import { useAuth } from './AuthContext';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://hubify-video-server-358184322842.us-central1.run.app';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
 const SOCKET_OPTIONS = { 
   transports: ['polling', 'websocket'],
   reconnectionAttempts: 10,
@@ -155,10 +155,18 @@ export const ChatProvider = ({ children }) => {
   const [showChatInfo, setShowChatInfo] = useState(false);
   const [groupInvites, setGroupInvites] = useState([]);
   const [roomToDelete, setRoomToDelete] = useState(null);
-  const [deletedRoomIds, setDeletedRoomIds] = useState([]);
+  const [deletedRoomIds, setDeletedRoomIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hubify_deleted_rooms');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const deletedRoomIdsRef = useRef(deletedRoomIds);
   useEffect(() => {
     deletedRoomIdsRef.current = deletedRoomIds;
+    localStorage.setItem('hubify_deleted_rooms', JSON.stringify(deletedRoomIds));
   }, [deletedRoomIds]);
 
   // Estados de formulário/dados temporários
@@ -263,7 +271,7 @@ export const ChatProvider = ({ children }) => {
       setOutgoingTarget({
         id: otherId,
         name: contact?.name || 'Colega',
-        avatarUrl: contact?.avatarUrl || "/images/default-avatar.png"
+        avatarUrl: contact?.avatarUrl || "/image/sem_foto.avif"
       });
 
       const callId = `call_${Date.now()}`;
@@ -366,7 +374,7 @@ export const ChatProvider = ({ children }) => {
       setOutgoingTarget({
         id: otherId,
         name: contact?.name || 'Colega',
-        avatarUrl: contact?.avatarUrl || "/images/default-avatar.png"
+        avatarUrl: contact?.avatarUrl || "/image/sem_foto.avif"
       });
 
       const callId = `call_${Date.now()}`;
@@ -455,6 +463,16 @@ export const ChatProvider = ({ children }) => {
 
   const handleSendMessage = async (text, attachment = null, replyToId = null) => {
     if (!activeRoomId || !user) return;
+
+    if (activeRoomId.startsWith('dm_')) {
+      const otherId = activeRoomId.replace('dm_', '').replace(user.id, '').replace('_', '');
+      if (otherId && !activeDMs.includes(otherId)) {
+        const newDMs = [...activeDMs, otherId];
+        setActiveDMs(newDMs);
+        saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(newDMs) }, { merge: true }).catch(console.error);
+      }
+    }
+
     const msgId = `msg_${Date.now()}_${user.id}_${Math.random().toString(36).substr(2, 5)}`;
     const now = Date.now();
     const newMsg = {
@@ -643,7 +661,7 @@ export const ChatProvider = ({ children }) => {
 
     newSocket.on('message-deleted', ({ messageId, roomId }) => {
       if (!messageId) return;
-      setAllMessages(prev => prev.filter(m => m.id !== messageId));
+      setAllMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDeleted: true, text: '🚫 Mensagem apagada', attachment: null } : m));
       if (roomId) {
         roomSortTimestamps.current[roomId] = roomSortTimestamps.current[roomId] || Date.now();
       }
@@ -856,12 +874,6 @@ export const ChatProvider = ({ children }) => {
     setDeletedRoomIds(prev => prev.filter(id => id !== roomId));
     processingDeletions.current.delete(roomId);
 
-    if (!activeDMs.includes(contactId)) {
-      const newDMs = [...activeDMs, contactId];
-      setActiveDMs(newDMs);
-      await saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(newDMs) }, { merge: true });
-    }
-
     setActiveRoomId(roomId);
     setView('chat');
   };
@@ -938,48 +950,49 @@ export const ChatProvider = ({ children }) => {
     }, { merge: true });
   };
 
+  const isCreatingGroupRef = React.useRef(false);
   const handleCreateGroup = async (e) => {
     e.preventDefault();
-    if (!newGroupName.trim()) return;
-    const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    await saveDocument(`artifacts/${appId}/public/data/groups/${groupId}`, {
-      id: groupId,
-      name: newGroupName,
-      description: newGroupDesc || "Grupo de colaboração corporativa.",
-      members: [user.id],
-      createdBy: user.id,
-      admins: [user.id],
-      isGroup: true,
-      avatar: newGroupName.substring(0, 2).toUpperCase(),
-      avatarUrl: newGroupAvatar || null,
-      createdAt: Date.now()
-    });
+    if (!newGroupName.trim() || isCreatingGroupRef.current) return;
+    isCreatingGroupRef.current = true;
+    try {
+      const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+      const newGroupData = {
+        id: groupId,
+        name: newGroupName,
+        description: newGroupDesc || "Grupo de colaboração corporativa.",
+        members: [user.id],
+        createdBy: user.id,
+        admins: [user.id],
+        isGroup: true,
+        avatar: newGroupName.substring(0, 2).toUpperCase(),
+        avatarUrl: newGroupAvatar || null,
+        createdAt: Date.now(),
+        pendingMembers: selectedGroupMembers
+      };
 
-    // Enviar convites para os membros selecionados e adicionar ao pendingMembers do grupo
-    const group = (await fetchCollection(`artifacts/${appId}/public/data/groups`)).docs
-      .find(d => d.id === groupId)?.data();
+      await saveDocument(`artifacts/${appId}/public/data/groups/${groupId}`, newGroupData);
+      setGroups(prev => [...prev, newGroupData]);
 
-    if (group) {
-      const newPending = [...new Set([...(group.pendingMembers || []), ...selectedGroupMembers])];
-      await saveDocument(`artifacts/${appId}/public/data/groups/${groupId}`, { pendingMembers: newPending }, { merge: true });
+      for (const memberId of selectedGroupMembers) {
+        const inviteId = `invite_${Date.now()}_${memberId}`;
+        await saveDocument(`artifacts/${appId}/public/data/invites/${inviteId}`, {
+          id: inviteId,
+          groupId,
+          groupName: newGroupName,
+          fromId: user.id,
+          fromName: currentUserProfile?.name || user.username || user.displayName,
+          toId: memberId,
+          timestamp: Date.now(),
+          status: 'pending'
+        });
+      }
+
+      setNewGroupName(''); setNewGroupDesc(''); setNewGroupAvatar(''); setSelectedGroupMembers([]); setShowGroupModal(false);
+      setActiveRoomId(groupId); setView('chat');
+    } finally {
+      isCreatingGroupRef.current = false;
     }
-
-    for (const memberId of selectedGroupMembers) {
-      const inviteId = `invite_${Date.now()}_${memberId}`;
-      await saveDocument(`artifacts/${appId}/public/data/invites/${inviteId}`, {
-        id: inviteId,
-        groupId,
-        groupName: newGroupName,
-        fromId: user.id,
-        fromName: currentUserProfile?.name || user.username || user.displayName,
-        toId: memberId,
-        timestamp: Date.now(),
-        status: 'pending'
-      });
-    }
-
-    setNewGroupName(''); setNewGroupDesc(''); setNewGroupAvatar(''); setSelectedGroupMembers([]); setShowGroupModal(false);
-    setActiveRoomId(groupId); setView('chat');
   };
 
   const handleUpdateGroup = async (groupId, data) => {
@@ -1087,9 +1100,13 @@ export const ChatProvider = ({ children }) => {
     if (window.confirm("Excluir esta mensagem?")) {
       const previousMessages = allMessages;
       setDeletingMessages(prev => new Set(prev).add(messageId));
-      setAllMessages(prev => prev.filter(m => m.id !== messageId));
+      setAllMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDeleted: true, text: '🚫 Mensagem apagada', attachment: null } : m));
       try {
-        await removeDocument(`artifacts/${appId}/public/data/messages/${messageId}`);
+        await patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, {
+          isDeleted: true,
+          text: '🚫 Mensagem apagada',
+          attachment: null
+        });
         if (socketRef.current) {
           socketRef.current.emit('message-deleted', {
             messageId,
@@ -1152,10 +1169,8 @@ export const ChatProvider = ({ children }) => {
 
           // Apagar mensagens da DM do banco para que a exclusão seja permanente
           try {
-            const { docs } = await fetchCollection(`artifacts/${appId}/public/data/messages`);
-            const msgs = docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.roomId === roomId);
-            if (msgs.length > 0) {
-              await Promise.all(msgs.map(m => removeDocument(`artifacts/${appId}/public/data/messages/${m.id}`)));
+            if (roomMsgs.length > 0) {
+              await Promise.all(roomMsgs.map(m => removeDocument(`artifacts/${appId}/public/data/messages/${m.id}`)));
             }
             if (socketRef.current) {
               socketRef.current.emit('conversation-deleted', { roomId, deletedBy: user.id, deletedAt: Date.now() });

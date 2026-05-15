@@ -260,7 +260,7 @@ export function InviteModal({
                   <div className="flex items-center gap-4">
                     <div className="relative">
                       <img 
-                        src={u.avatarUrl || "/images/default-avatar.png"} 
+                        src={u.avatarUrl || "/image/sem_foto.avif"} 
                         alt={u.name} 
                         className="w-12 h-12 rounded-2xl object-cover bg-zinc-900 border border-white/5" 
                       />
@@ -327,9 +327,7 @@ export function BottomControls({
                         <MonitorUp size={20} />
                     </button>
                 )}
-                {!isVoiceMode && (
-                    <button onClick={toggleInvite} className="w-11 h-11 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/10 transition-all"><UserPlus size={20} /></button>
-                )}
+                <button onClick={toggleInvite} className="w-11 h-11 flex items-center justify-center rounded-full bg-white/5 text-white hover:bg-white/10 transition-all"><UserPlus size={20} /></button>
             </div>
 
             <div className="w-px h-8 bg-white/10 mx-1.5" />

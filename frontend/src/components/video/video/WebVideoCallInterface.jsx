@@ -76,6 +76,53 @@ function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fa
   );
 }
 
+function ScreenShareTile({ stream, scale, setScale, x, y }) {
+  const ref = useRef(null);
+  const [initialScale, setInitialScale] = React.useState(1);
+  const [initialDist, setInitialDist] = React.useState(0);
+
+  useEffect(() => {
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      if (typeof ref.current.play === 'function') ref.current.play().catch(() => {});
+    }
+  }, [stream]);
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      setInitialDist(dist);
+      setInitialScale(scale);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 2 && initialDist > 0) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      const newScale = Math.min(Math.max(1, initialScale * (dist / initialDist)), 4);
+      setScale(newScale);
+    }
+  };
+
+  return (
+    <motion.div
+      drag={scale > 1}
+      style={{ x, y, scale }}
+      className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+    >
+      <video autoPlay playsInline className="w-full h-full object-contain" ref={ref} />
+    </motion.div>
+  );
+}
+
 export default function WebVideoCallInterface({
   roomId, currentUser, allParticipants, localStream, cameraStream, screenSharing, time,
   isMicOn, isVideoOn, isHandRaised, setIsHandRaised,
@@ -108,7 +155,7 @@ export default function WebVideoCallInterface({
     <div className="h-dynamic-screen w-full bg-black text-white flex flex-col font-sans overflow-hidden relative selection:bg-blue-500/30">
       <header className="h-24 px-8 shrink-0 z-50 flex justify-between items-center bg-black">
         <div className="flex items-center gap-3 bg-zinc-900/60 backdrop-blur-xl border border-white/5 p-2 rounded-2xl shadow-xl">
-          <div className="bg-blue-600 px-2.5 py-1 rounded-lg font-black italic text-[10px] shadow-lg shadow-blue-600/30">HUBIFY</div>
+          <img src="/image/logo.png" alt="Hubify" className="h-7 w-auto object-contain" />
           <div className="h-4 w-px bg-white/10" />
           <div className="flex flex-col">
             <h1 className="text-xs font-bold uppercase tracking-widest text-white/90">
@@ -144,21 +191,11 @@ export default function WebVideoCallInterface({
           {isAnyScreenSharing ? (
             <div className="w-full h-full flex">
               <div className="flex-1 relative bg-black overflow-hidden flex items-center justify-center group">
-                <motion.div
-                  drag={scale > 1}
-                  style={{ x, y, scale }}
-                  className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
-                >
-                  <video autoPlay playsInline className="w-full h-full object-contain" ref={el => { if (el && sharingParticipant) el.srcObject = sharingParticipant.stream }} />
-                </motion.div>
-
-                {/* ZOOM CONTROLS */}
-                <div className="absolute bottom-6 right-6 flex gap-2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => setScale(s => Math.min(s + 0.5, 3))} className="p-3.5 bg-zinc-900/80 border border-white/10 rounded-xl hover:bg-zinc-800 transition-colors shadow-2xl">
-                    <ZoomIn size={20} />
-                  </button>
-                  {scale > 1 && <button onClick={resetView} className="p-3.5 bg-blue-600 rounded-xl text-white shadow-lg"><RotateCcw size={20} /></button>}
-                </div>
+                <ScreenShareTile 
+                  stream={sharingParticipant.stream} 
+                  scale={scale} setScale={setScale} 
+                  x={x} y={y} 
+                />
               </div>
               {!isCamHidden && (
                 <div className="w-72 flex flex-col border-l border-white/5 bg-black overflow-y-auto no-scrollbar shrink-0">

@@ -67,7 +67,7 @@ export default function Auth({ onLogin }) {
     setLoading(true);
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
       const base = apiUrl || '';
       let payload = formData;
       if (isLogin) {
@@ -118,7 +118,7 @@ export default function Auth({ onLogin }) {
 
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://hubify-backend-358184322842.us-central1.run.app/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
       const res = await fetch(`${apiUrl}/auth/users/${mustUpdateUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -145,7 +145,7 @@ export default function Auth({ onLogin }) {
 
         <div className="relative z-10">
           <div className="mb-8 md:mb-24 flex flex-col items-center md:items-start text-center md:text-left">
-            <span className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tighter italic text-white">Hubify</span>
+            <img src="/image/logo.png" alt="Hubify Logo" className="h-12 md:h-16 w-auto object-contain" />
             <div className="w-10 md:w-12 h-1 bg-indigo-600 mt-1 md:mt-2 rounded-full shadow-[0_0_20px_rgba(79,70,229,0.5)]" />
           </div>
 
@@ -190,7 +190,7 @@ export default function Auth({ onLogin }) {
 
         <div className="relative z-10 flex flex-col items-center text-center px-6">
           <div className="mb-4">
-            <span className="text-4xl font-bold tracking-tighter italic text-white drop-shadow-[0_0_15px_rgba(79,70,229,0.4)]">Hubify</span>
+            <img src="/image/logo.png" alt="Hubify Logo" className="h-14 w-auto object-contain drop-shadow-[0_0_15px_rgba(79,70,229,0.4)]" />
             <div className="w-10 h-1 bg-indigo-600 mx-auto mt-1 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.5)]" />
           </div>
           

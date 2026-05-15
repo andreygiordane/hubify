@@ -445,7 +445,7 @@ const ContactDetailModal = ({ contact, onClose, onStartChat }) => {
         <div className="px-8 pb-8 -mt-16 flex flex-col items-center">
           <div className="relative mb-6">
             <img 
-              src={contact.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+              src={contact.avatarUrl || "/image/sem_foto.avif"} 
               alt={contact.name} 
               className="w-32 h-32 rounded-[2.5rem] bg-slate-100 object-cover border-4 border-white shadow-xl"
             />
@@ -497,6 +497,7 @@ const ContactDetailModal = ({ contact, onClose, onStartChat }) => {
 const AddMemberModal = ({ groupId, onClose }) => {
   const { users, groups, groupInvites, handleSendGroupInvite } = useChat();
   const { user } = useAuth();
+  const [localInvites, setLocalInvites] = useState(new Set());
   const group = groups.find(g => g.id === groupId);
   
   if (!group) return null;
@@ -515,7 +516,7 @@ const AddMemberModal = ({ groupId, onClose }) => {
           <div className="space-y-4">
             {users.filter(u => u.id !== user?.id).map(u => {
               const isMember = group.members?.includes(u.id);
-              const isInvited = groupInvites?.find(i => i.groupId === groupId && i.toId === u.id && i.status === 'pending');
+              const isInvited = groupInvites?.find(i => i.groupId === groupId && i.toId === u.id && i.status === 'pending') || localInvites.has(u.id);
 
               return (
                 <div key={u.id} className={`flex items-center justify-between p-4 rounded-2xl border ${isMember ? 'bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}>
@@ -529,10 +530,13 @@ const AddMemberModal = ({ groupId, onClose }) => {
                   {isMember ? (
                     <span className="px-3 py-1.5 bg-slate-200 text-slate-500 text-[10px] font-bold rounded-lg uppercase tracking-wider">Membro</span>
                   ) : isInvited ? (
-                    <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-lg uppercase tracking-wider border border-indigo-100 italic">Convidado</span>
+                    <span className="px-3 py-1.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold rounded-lg uppercase tracking-wider border border-indigo-100 italic">Convite Enviado</span>
                   ) : (
                     <button 
-                      onClick={() => handleSendGroupInvite(groupId, u.id)}
+                      onClick={() => {
+                        setLocalInvites(prev => new Set(prev).add(u.id));
+                        handleSendGroupInvite(groupId, u.id);
+                      }}
                       className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
                     >
                       Convidar
@@ -706,7 +710,7 @@ const EditProfileModal = ({ user, profile, onClose, onSave }) => {
           <div className="flex flex-col items-center mb-8">
             <div className="relative group">
               <img 
-                src={avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+                src={avatar || "/image/sem_foto.avif"} 
                 alt="Avatar" 
                 className="w-32 h-32 rounded-[2.5rem] bg-slate-100 object-cover border-4 border-white shadow-xl transition-transform group-hover:scale-105"
               />
@@ -749,7 +753,7 @@ const EditProfileModal = ({ user, profile, onClose, onSave }) => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 flex flex-col items-center">
                   <div className="w-36 h-36 rounded-full overflow-hidden bg-slate-100 border-4 border-white shadow-xl flex items-center justify-center">
-                    <img src={avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} alt="Avatar selecionado" className="w-full h-full object-cover" />
+                    <img src={avatar || "/image/sem_foto.avif"} alt="Avatar selecionado" className="w-full h-full object-cover" />
                   </div>
                   <p className="mt-4 text-sm font-semibold text-slate-700 text-center">Avatar selecionado</p>
                   <p className="text-[12px] text-slate-400 text-center mt-2 px-2">Escolha um avatar que represente seu perfil profissional. Clique para selecionar.</p>

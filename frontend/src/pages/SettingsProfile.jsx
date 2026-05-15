@@ -208,7 +208,7 @@ export default function SettingsProfile() {
               <div className="lg:col-span-2 space-y-5">
                 <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 flex flex-col items-center">
                   <img
-                    src={avatar || '/images/default-avatar.png'}
+                    src={avatar || '/image/sem_foto.avif'}
                     alt="Avatar"
                     className="w-40 h-40 rounded-[3.5rem] object-cover bg-white border-4 border-white shadow-[0_20px_50px_rgba(0,0,0,0.15)] transition-all duration-500"
                   />

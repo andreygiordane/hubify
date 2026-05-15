@@ -35,7 +35,7 @@ public class AuthService {
         user.setOnline(true);
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         if (user.getAvatarUrl() == null || user.getAvatarUrl().isEmpty()) {
-            user.setAvatarUrl("/images/default-avatar.png");
+            user.setAvatarUrl("/image/sem_foto.avif");
         }
         User savedUser = userRepository.save(user);
         return convertToDTO(savedUser);
@@ -140,7 +140,11 @@ public class AuthService {
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
         dto.setDisplayName(user.getDisplayName());
-        dto.setAvatarUrl(user.getAvatarUrl());
+        String av = user.getAvatarUrl();
+        if (av == null || av.isEmpty() || av.equals("/images/default-avatar.png") || av.contains("api.dicebear.com/7.x/avataaars")) {
+            av = "/image/sem_foto.avif";
+        }
+        dto.setAvatarUrl(av);
         dto.setRole(user.getRole());
         dto.setOnline(user.isOnline());
         dto.setStatus(user.getStatus());

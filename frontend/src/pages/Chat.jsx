@@ -124,7 +124,22 @@ export default function Chat() {
     }
   };
 
-  const currentRoomInfo = chatRooms.find(r => r.id === activeRoomId);
+  let currentRoomInfo = chatRooms.find(r => r.id === activeRoomId);
+  if (!currentRoomInfo && activeRoomId?.startsWith('dm_')) {
+    const otherId = activeRoomId.replace('dm_', '').split('_').find(id => id !== user?.id);
+    const otherUser = users.find(u => u.id === otherId);
+    if (otherUser) {
+      currentRoomInfo = {
+        id: activeRoomId,
+        type: 'dm',
+        name: otherUser.name,
+        avatarUrl: otherUser.avatarUrl,
+        otherUserId: otherUser.id,
+        status: statusConfig?.[otherUser.status]?.color || 'bg-slate-300',
+        members: [user?.id, otherUser.id]
+      };
+    }
+  }
   const currentMessages = (allMessages || [])
     .filter(m => m.roomId === activeRoomId)
     .filter(m => !msgSearchQuery || m.text.toLowerCase().includes(msgSearchQuery.toLowerCase()));
@@ -505,15 +520,15 @@ export default function Chat() {
                         </button>
                       )}
                       {!isMine && showAvatar && (
-                        <img src={sender?.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} className="w-8 h-8 rounded-lg bg-slate-100 shrink-0 shadow-sm" alt="Avatar" />
+                        <img src={sender?.avatarUrl || "/image/sem_foto.avif"} className="w-8 h-8 rounded-lg bg-slate-100 shrink-0 shadow-sm" alt="Avatar" />
                       )}
                       {!isMine && !showAvatar && <div className="w-8 shrink-0" />}
                       
                       <div className="flex flex-col gap-1">
                         {!isMine && showAvatar && <span className="text-[10px] font-bold text-slate-400 ml-1 uppercase tracking-wider">{sender?.name}</span>}
                         
-                        {isMine && (
-                          <div className="flex justify-end relative">
+                        {!msg.isDeleted && (
+                          <div className={`flex relative ${isMine ? 'justify-end' : 'justify-start'}`}>
                             <button 
                               onClick={() => setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id)}
                               className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
@@ -525,7 +540,7 @@ export default function Chat() {
                             {activeMessageMenuId === msg.id && (
                               <div 
                                 ref={messageMenuRef}
-                                className="absolute top-full right-0 mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200"
+                                className={`absolute top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-slate-100 py-1 z-20 animate-in fade-in zoom-in-95 duration-200 ${isMine ? 'right-0' : 'left-0'}`}
                               >
                                 <button 
                                   onClick={() => {
@@ -558,10 +573,9 @@ export default function Chat() {
                                   <Forward size={12} className="text-indigo-500" /> Encaminhar
                                 </button>
 
-                                <div className="h-[1px] bg-slate-50 my-1" />
-
                                 {isMine && (
                                   <>
+                                    <div className="h-[1px] bg-slate-50 my-1" />
                                     {Date.now() - msg.timestamp < 5 * 60 * 1000 ? (
                                       <button 
                                         onClick={() => {
@@ -673,7 +687,7 @@ export default function Chat() {
                             </div>
                           )}
                           {msg.text && (
-                            <p className="text-sm leading-relaxed font-medium break-words">{msg.text}</p>
+                            <p className={`text-sm leading-relaxed font-medium break-words ${msg.isDeleted ? 'italic opacity-60 text-slate-500' : ''}`}>{msg.text}</p>
                           )}
                         </div>
                         <div className={`flex items-center gap-2 relative ${isMine ? 'justify-end' : ''}`}>
@@ -832,26 +846,25 @@ export default function Chat() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2">
+                
+                <div className="flex-1 relative flex items-center">
                   <button 
                     type="button"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       if (!showEmojiPicker) {
                         messageInputRef.current?.blur();
                       }
                       setShowEmojiPicker(!showEmojiPicker);
                     }}
-                    className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all active:scale-95 shrink-0 border ${
+                    className={`absolute left-2 z-10 w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
                       showEmojiPicker 
-                        ? 'bg-indigo-600 text-white border-indigo-600' 
-                        : 'text-slate-400 bg-slate-50 border-slate-100 hover:bg-slate-100 hover:text-indigo-600'
+                        ? 'text-indigo-600' 
+                        : 'text-slate-400 hover:text-indigo-600'
                     }`}
                   >
                     <Smile className="w-5 h-5" />
                   </button>
-                </div>
-                
-                <div className="flex-1 relative flex items-center">
                   <input 
                     ref={messageInputRef}
                     type="text" 
@@ -863,8 +876,27 @@ export default function Chat() {
                       typingTimeoutRef.current = setTimeout(() => setTyping(false), 2000);
                     }}
                     placeholder="Escreva uma mensagem..."
-                    className="w-full bg-slate-50 border border-slate-100 text-slate-700 rounded-2xl px-5 py-4 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
+                    className="w-full bg-slate-50 border border-slate-100 text-slate-700 rounded-2xl pl-12 pr-5 py-4 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium"
                   />
+
+                  {showEmojiPicker && (
+                    <div 
+                      className="hidden md:block absolute bottom-full left-0 mb-2 z-[100] animate-in slide-in-from-bottom-2 duration-200 shadow-2xl rounded-2xl overflow-hidden border border-slate-100"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <EmojiPicker 
+                        onEmojiClick={(emojiData) => {
+                          setNewMessage(prev => prev + emojiData.emoji);
+                          messageInputRef.current?.focus();
+                        }}
+                        width={320}
+                        height={400}
+                        searchDisabled={false}
+                        skinTonesDisabled={true}
+                        previewConfig={{ showPreview: false }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <button 
@@ -876,27 +908,32 @@ export default function Chat() {
                 </button>
               </form>
             </div>
+            
+            <div className="md:hidden">
+              {showEmojiPicker && (
+                <div 
+                  className="w-full bg-slate-50 border-t border-slate-100 animate-in slide-in-from-bottom-2 duration-200 flex" 
+                  style={{ height: '400px' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <EmojiPicker 
+                    onEmojiClick={(emojiData) => {
+                      setNewMessage(prev => prev + emojiData.emoji);
+                    }}
+                    width="100%"
+                    height="100%"
+                    searchDisabled={false}
+                    skinTonesDisabled={true}
+                    previewConfig={{ showPreview: false }}
+                  />
+                </div>
+              )}
+            </div>
+
             </div>
           </div>
 
-          {showEmojiPicker && (
-            <div className="absolute bottom-28 left-4 md:left-6 z-[100] animate-in slide-in-from-bottom-4 duration-300 shadow-2xl">
-              <div className="relative">
-                <button onClick={() => setShowEmojiPicker(false)} className="absolute -top-3 -right-3 w-8 h-8 bg-white border border-slate-100 rounded-full shadow-lg flex items-center justify-center text-slate-400 hover:text-red-500 z-10 transition-colors">
-                  <X size={16} />
-                </button>
-                <EmojiPicker 
-                  onEmojiClick={(emojiData) => {
-                    setNewMessage(prev => prev + emojiData.emoji);
-                    setShowEmojiPicker(false);
-                    messageInputRef.current?.focus();
-                  }}
-                  width={320}
-                  height={400}
-                />
-              </div>
-            </div>
-          )}
+
         </div>
       )}
 
@@ -925,7 +962,7 @@ export default function Chat() {
                     <img src={currentRoomInfo?.avatarUrl} className="w-24 h-24 rounded-3xl object-cover shadow-2xl" alt="" />
                   )}
                   
-                  {currentRoomInfo.isGroup && currentRoomInfo.createdBy === user.id && (
+                  {currentRoomInfo?.isGroup && currentRoomInfo?.createdBy === user?.id && (
                     <button 
                       onClick={() => setShowAvatarPicker(!showAvatarPicker)}
                       className="absolute -bottom-2 -right-2 w-10 h-10 bg-indigo-600 text-white rounded-2xl shadow-lg flex items-center justify-center border-4 border-white hover:bg-indigo-700 transition-all active:scale-90 z-10"
@@ -960,7 +997,7 @@ export default function Chat() {
                           <Edit size={14} /> Editar Foto
                         </button>
 
-                        {currentRoomInfo.avatarUrl && (
+                        {currentRoomInfo?.avatarUrl && (
                           <button 
                             onClick={() => {
                               handleUpdateGroup(currentRoomInfo.id, { avatarUrl: null });
@@ -975,13 +1012,13 @@ export default function Chat() {
                     </div>
                   )}
                 </div>
-                <h4 className="font-black text-xl text-slate-800">{currentRoomInfo.name}</h4>
+                <h4 className="font-black text-xl text-slate-800">{currentRoomInfo?.name}</h4>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                  {currentRoomInfo.isGroup ? 'Grupo de Trabalho' : (currentRoomInfo.isOnline ? 'Online agora' : 'Offline')}
+                  {currentRoomInfo?.isGroup ? 'Grupo de Trabalho' : (currentRoomInfo?.isOnline ? 'Online agora' : 'Offline')}
                 </p>
               </div>
 
-              {!currentRoomInfo.isGroup && recipient && (
+              {!currentRoomInfo?.isGroup && recipient && (
                 <div className="space-y-4 pt-4 border-t border-slate-50">
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="flex items-center gap-3 mb-1">
@@ -1005,12 +1042,12 @@ export default function Chat() {
                 </div>
               )}
 
-              {currentRoomInfo.isGroup && (
+              {currentRoomInfo?.isGroup && (
                 <div className="space-y-6 pt-4 border-t border-slate-50">
                   <div>
                     <div className="flex items-center justify-between mb-4">
                       <h5 className="font-black text-slate-800 uppercase text-[11px] tracking-widest flex items-center gap-2">
-                        <Plus className="w-4 h-4 text-indigo-600" /> Membros ({currentRoomInfo.members?.length || 0})
+                        <Plus className="w-4 h-4 text-indigo-600" /> Membros ({currentRoomInfo?.members?.length || 0})
                       </h5>
                       <button 
                         onClick={() => setShowAddMemberModal(true)}
@@ -1020,13 +1057,13 @@ export default function Chat() {
                       </button>
                     </div>
                     <div className="space-y-3">
-                      {(currentRoomInfo.members || []).map(mId => {
+                      {(currentRoomInfo?.members || []).map(mId => {
                         const m = users.find(u => u.id === mId);
-                        const isAdmin = currentRoomInfo.createdBy === mId;
+                        const isAdmin = currentRoomInfo?.createdBy === mId;
                         return (
                           <div key={mId} className="flex items-center justify-between group/member p-2 rounded-xl hover:bg-slate-50 transition-all">
                             <div className="flex items-center gap-3">
-                              <img src={m?.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} className="w-9 h-9 rounded-xl shadow-sm" alt="" />
+                              <img src={m?.avatarUrl || "/image/sem_foto.avif"} className="w-9 h-9 rounded-xl shadow-sm" alt="" />
                               <div>
                                 <p className="text-xs font-bold text-slate-800">{m?.name || 'Usuário'}</p>
                                 <div className="flex items-center gap-2">
@@ -1037,9 +1074,9 @@ export default function Chat() {
                                 </div>
                               </div>
                             </div>
-                            {currentRoomInfo.createdBy === user.id && mId !== user.id && (
+                            {currentRoomInfo?.createdBy === user?.id && mId !== user?.id && (
                               <button 
-                                onClick={(e) => { e.stopPropagation(); handleRemoveMember(currentRoomInfo.id, mId); }}
+                                onClick={(e) => { e.stopPropagation(); handleRemoveMember(currentRoomInfo?.id, mId); }}
                                 className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover/member:opacity-100 transition-all"
                                 title="Remover do grupo"
                               >
@@ -1082,8 +1119,8 @@ export default function Chat() {
                     }}
                     className="w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all group"
                   >
-                    {room.isGroup ? (
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-100 group-hover:scale-110 transition-transform">{room.avatar}</div>
+                    {room?.isGroup ? (
+                      <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-100 group-hover:scale-110 transition-transform">{room?.avatar}</div>
                     ) : (
                       <div className="relative">
                         <img src={room?.avatarUrl} className="w-12 h-12 rounded-xl object-cover shadow-sm group-hover:scale-110 transition-transform" alt="" />
@@ -1091,8 +1128,8 @@ export default function Chat() {
                       </div>
                     )}
                     <div className="flex-1 text-left">
-                      <p className="font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{room.name}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{room.isGroup ? 'Grupo' : 'Contato'}</p>
+                      <p className="font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{room?.name}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{room?.isGroup ? 'Grupo' : 'Contato'}</p>
                     </div>
                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                       <Forward size={18} />
@@ -1128,10 +1165,10 @@ export default function Chat() {
                 </div>
                 
                 <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  {roomToDelete.isGroup ? 'Sair do grupo?' : 'Excluir conversa?'}
+                  {roomToDelete?.isGroup ? 'Sair do grupo?' : 'Excluir conversa?'}
                 </h3>
                 <p className="text-gray-500 text-sm mb-8 leading-relaxed">
-                  Tem certeza que deseja {roomToDelete.isGroup ? 'sair do grupo' : 'excluir esta conversa'}? 
+                  Tem certeza que deseja {roomToDelete?.isGroup ? 'sair do grupo' : 'excluir esta conversa'}? 
                   Esta ação não poderá ser desfeita e todas as mensagens serão perdidas.
                 </p>
 

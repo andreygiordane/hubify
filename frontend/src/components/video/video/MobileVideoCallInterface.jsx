@@ -88,6 +88,54 @@ function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fal
   );
 }
 
+function MobileScreenShareTile({ stream, name, avatarUrl, isLocal, handRaised, isCamOn, scale, setScale, x, y }) {
+  const [initialScale, setInitialScale] = React.useState(1);
+  const [initialDist, setInitialDist] = React.useState(0);
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      setInitialDist(dist);
+      setInitialScale(scale);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 2 && initialDist > 0) {
+      const dist = Math.hypot(
+        e.touches[0].pageX - e.touches[1].pageX,
+        e.touches[0].pageY - e.touches[1].pageY
+      );
+      const newScale = Math.min(Math.max(1, initialScale * (dist / initialDist)), 4);
+      setScale(newScale);
+    }
+  };
+
+  return (
+    <motion.div
+      drag={scale > 1}
+      style={{ x, y, scale }}
+      className="w-full h-full flex items-center justify-center"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+    >
+      <MobileVideoTile
+        stream={stream}
+        name={name}
+        avatarUrl={avatarUrl}
+        isLocal={isLocal}
+        muted={true}
+        handRaised={handRaised}
+        isScreenSharing={true}
+        isCamOn={isCamOn}
+      />
+    </motion.div>
+  );
+}
+
 export default function MobileVideoCallInterface({
   roomId, currentUser, allParticipants, localStream, cameraStream, screenSharing, time,
   isMicOn, isVideoOn, isHandRaised, setIsHandRaised,
@@ -110,7 +158,7 @@ export default function MobileVideoCallInterface({
     <div className="h-dynamic-screen w-full bg-black text-white flex flex-col font-sans overflow-hidden relative selection:bg-blue-500/30">
       <header className="shrink-0 z-50 flex justify-between items-center bg-black h-20 px-4">
         <div className="flex items-center gap-3 bg-zinc-900/60 backdrop-blur-xl border border-white/5 p-2 rounded-2xl shadow-xl">
-          <div className="bg-blue-600 px-2.5 py-1 rounded-lg font-black italic text-[10px] shadow-lg shadow-blue-600/30">HUBIFY</div>
+          <img src="/image/logo.png" alt="Hubify" className="h-6 w-auto object-contain" />
           <div className="h-4 w-px bg-white/10" />
           <div className="flex flex-col">
             <h1 className="text-[10px] font-bold uppercase tracking-widest text-white/90 truncate max-w-[120px]">
@@ -131,35 +179,22 @@ export default function MobileVideoCallInterface({
       <main className="flex-1 relative overflow-hidden flex flex-col">
         {allParticipants.some(p => p.isScreenSharing) ? (
           <div className="flex flex-col h-full w-full bg-black">
-            {/* Prioridade: Tela Compartilhada com Zoom */}
             <div className="flex-[3] relative border-b border-white/5 overflow-hidden group">
               {allParticipants.filter(p => p.isScreenSharing).map(p => (
-                <motion.div
+                <MobileScreenShareTile
                   key={p.id}
-                  drag={scale > 1}
-                  style={{ x, y, scale }}
-                  className="w-full h-full flex items-center justify-center"
-                >
-                  <MobileVideoTile
-                    stream={p.stream}
-                    name={p.name}
-                    avatarUrl={p.avatarUrl}
-                    isLocal={p.isLocal}
-                    muted={true}
-                    handRaised={p.handRaised}
-                    isScreenSharing={p.isScreenSharing}
-                    isCamOn={p.isCamOn}
-                  />
-                </motion.div>
+                  stream={p.stream}
+                  name={p.name}
+                  avatarUrl={p.avatarUrl}
+                  isLocal={p.isLocal}
+                  handRaised={p.handRaised}
+                  isCamOn={p.isCamOn}
+                  scale={scale}
+                  setScale={setScale}
+                  x={x}
+                  y={y}
+                />
               ))}
-
-              {/* ZOOM CONTROLS */}
-              <div className="absolute top-4 right-4 flex gap-2 z-50">
-                <button onClick={() => setScale(s => Math.min(s + 0.5, 3))} className="p-3 bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl text-white shadow-2xl">
-                  <ZoomIn size={20} />
-                </button>
-                {scale > 1 && <button onClick={resetView} className="p-3 bg-blue-600 rounded-xl text-white shadow-lg"><RotateCcw size={20} /></button>}
-              </div>
             </div>
 
             {/* Participantes: Lista Horizontal (Telas menores para se adaptar) */}

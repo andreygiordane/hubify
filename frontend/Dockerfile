@@ -10,8 +10,8 @@ ARG VITE_API_URL
 ARG VITE_SOCKET_URL
 
 # Set env vars no build
-ENV VITE_API_URL=${VITE_API_URL:-https://hubify-backend-358184322842.us-central1.run.app/api}
-ENV VITE_SOCKET_URL=${VITE_SOCKET_URL:-https://hubify-video-server-358184322842.us-central1.run.app}
+ENV VITE_API_URL=${VITE_API_URL:-http://localhost:8082/api}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL:-http://localhost:8080}
 
 RUN npm run build
 

@@ -298,7 +298,7 @@ function InviteModal({ isOpen, onClose, users, statusConfig, currentUser, roomId
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <img 
-                      src={u.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`} 
+                      src={u.avatarUrl || "/image/sem_foto.avif"} 
                       alt={u.name} 
                       className="w-10 h-10 rounded-full object-cover bg-gray-800" 
                     />
@@ -1022,7 +1022,7 @@ export default function MeetingInterface({
           isMicOn={isMicOn} 
           time={time} 
           participantName={activeRemote?.name || "Aguardando convidados..."} 
-          participantAvatar={activeRemote?.avatarUrl || currentUser.avatarUrl || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"} 
+          participantAvatar={activeRemote?.avatarUrl || currentUser.avatarUrl || "/image/sem_foto.avif"} 
         />
         
         <BottomControls isMicOn={isMicOn} toggleMic={toggleMic} isVideoOn={isVideoOn} toggleVideo={toggleVideo} isHandRaised={isHandRaised} toggleHand={() => setIsHandRaised(!isHandRaised)} screenSharing={screenSharing} shareScreen={shareScreen} onLeave={handleExit} participantCount={allParticipants.length} toggleChat={() => setIsChatOpen(true)} togglePeople={() => setIsPeopleOpen(true)} isMobileView={windowIsMobile} isVoiceMode={true} toggleInvite={() => setIsInviteOpen(true)} />

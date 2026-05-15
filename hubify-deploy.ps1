@@ -19,6 +19,7 @@ gcloud run deploy hubify-video-server `
     --region $Region `
     --project $ProjectID `
     --allow-unauthenticated `
+    --max-instances 1 `
     --set-env-vars "BACKEND_URL=$BackendURL"
 cd ..
 

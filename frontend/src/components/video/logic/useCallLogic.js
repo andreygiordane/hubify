@@ -67,19 +67,18 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     screenStreamRef.current = screenStream;
   }, [screenStream]);
 
+  // Efeito de Entrada e Saída da Sala (Estrito)
   useEffect(() => {
     console.log(`[Componente] useCallLogic montado para sala: ${roomId} | Socket: ${socket?.id || 'Desconectado'}`);
-    if (socket && roomId && !hasConnected) {
+    if (socket && roomId && currentUser) {
       const handleInit = () => {
         console.log(`[Socket] Gatilho de inicialização disparado para ${socket.id}`);
-        // 1. Entrar na sala IMEDIATAMENTE (Sinalização em paralelo com Mídia)
         socket.emit("join-room", {
           roomId,
           uid: currentUser.uid,
           name: currentUser.name,
           avatarUrl: currentUser.avatarUrl
         });
-        // 2. Iniciar mídia em paralelo
         initMedia();
       };
 
@@ -88,13 +87,16 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       } else {
         socket.once('connect', handleInit);
       }
+
+      return () => {
+        socket.emit('leave-room', { roomId });
+      };
     }
   }, [socket, roomId]);
 
   // Gerenciamento de Listeners (Prevenção de Duplicidade)
   useEffect(() => {
     if (!socket) return;
-
 
     socket.off('room-participants');
     socket.on('room-participants', updated => {
@@ -104,9 +106,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         let changed = false;
         Object.keys(next).forEach(sid => {
           const p = updated.find(part => part.socketId === sid);
-          if (next[sid]?.screen && (!p || !p.isScreenSharing)) {
-            next[sid] = { ...next[sid], screen: null };
-            changed = true;
+          if (next[sid]?.list?.length > 1 && (!p || !p.isScreenSharing)) {
           }
         });
         return changed ? next : prev;
@@ -115,7 +115,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
     socket.off('receive-chat');
     socket.on('receive-chat', msg => {
-      const isSelf = msg.sender === currentUser.name;
+      const isSelf = msg.sender === currentUser?.name;
       setMessages(prev => [...prev, {
         sender: msg.sender,
         text: msg.text,
@@ -178,7 +178,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       socket.off('receiving-returned-signal');
       socket.off('user-disconnected');
     };
-  }, [socket, roomId, currentUser, onLeave]);
+  }, [socket, roomId, onLeave, currentUser]);
 
   useEffect(() => {
     if (socket && roomId) {
@@ -231,8 +231,15 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       socket.emit("sending-signal", { userToSignal, callerID, signal });
     });
     peer.on("stream", s => {
-      console.log(`[WebRTC] Stream recebido de ${userToSignal}`);
-      setStreams(prev => ({ ...prev, [userToSignal]: { ...(prev[userToSignal] || {}), webcam: s } }));
+      console.log(`[WebRTC] Stream recebido de ${userToSignal}. Tracks (V/A): ${s.getVideoTracks().length}/${s.getAudioTracks().length}`);
+      setStreams(prev => {
+        const existing = prev[userToSignal] || { list: [] };
+        // Atualizar a lista de streams, prevenindo duplicatas exatas, ou substituindo stream id se necessário
+        if (!existing.list.find(st => st.id === s.id)) {
+            return { ...prev, [userToSignal]: { list: [...existing.list, s] } };
+        }
+        return prev;
+      });
     });
     return peer;
   };
@@ -243,8 +250,14 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       socket.emit("returning-signal", { signal, callerID });
     });
     peer.on("stream", s => {
-      console.log(`[WebRTC] Stream recebido de ${callerID}`);
-      setStreams(prev => ({ ...prev, [callerID]: { ...(prev[callerID] || {}), webcam: s } }));
+      console.log(`[WebRTC] Stream retornado de ${callerID}. Tracks (V/A): ${s.getVideoTracks().length}/${s.getAudioTracks().length}`);
+      setStreams(prev => {
+        const existing = prev[callerID] || { list: [] };
+        if (!existing.list.find(st => st.id === s.id)) {
+            return { ...prev, [callerID]: { list: [...existing.list, s] } };
+        }
+        return prev;
+      });
     });
     peer.signal(incomingSignal);
     return peer;
@@ -257,10 +270,35 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     }
   };
 
-  const toggleVideo = () => {
+  const toggleVideo = async () => {
     if (cameraStream) {
       const videoTrack = cameraStream.getVideoTracks()[0];
-      if (videoTrack) { videoTrack.enabled = !videoTrack.enabled; setIsVideoOn(videoTrack.enabled); }
+      if (videoTrack && videoTrack.readyState === 'ended') {
+        try {
+          const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const newVideoTrack = newStream.getVideoTracks()[0];
+          cameraStream.removeTrack(videoTrack);
+          cameraStream.addTrack(newVideoTrack);
+          
+          if (localStreamRef.current) {
+             const oldLocalTrack = localStreamRef.current.getVideoTracks()[0];
+             if (oldLocalTrack) localStreamRef.current.removeTrack(oldLocalTrack);
+             localStreamRef.current.addTrack(newVideoTrack);
+          }
+
+          peersRef.current.forEach(({ peer }) => {
+            try { peer.replaceTrack(videoTrack, newVideoTrack, cameraStream); } catch (e) {}
+          });
+          
+          setIsVideoOn(true);
+        } catch (err) {
+          console.error("Erro ao recuperar câmera:", err);
+          setIsVideoOn(false);
+        }
+      } else if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled; 
+        setIsVideoOn(videoTrack.enabled);
+      }
     }
   };
 
@@ -310,10 +348,65 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     onLeave();
   };
 
+  const streamsCache = useRef({});
+
   // REATOR: allParticipants agora é guiado pela lista de participantes do servidor
   let participantsList = roomParticipants.map(p => {
     const isLocal = p.socketId === socket?.id;
-    const userStreams = streams[p.socketId] || {};
+    const userStreamsList = streams[p.socketId]?.list || [];
+    
+    let webcamStream = null;
+    let screenStream = null;
+
+    if (userStreamsList.length > 0) {
+        let cached = streamsCache.current[p.socketId];
+        if (!cached) {
+            cached = { webcam: new MediaStream(), screen: new MediaStream() };
+            streamsCache.current[p.socketId] = cached;
+        }
+
+        const { webcam, screen } = cached;
+        const activeAudioTracks = [];
+        const activeVideoTracks = [];
+        
+        userStreamsList.forEach(s => {
+            s.getAudioTracks().forEach(t => { if (t.readyState === 'live') activeAudioTracks.push(t); });
+            s.getVideoTracks().forEach(t => { if (t.readyState === 'live') activeVideoTracks.push(t); });
+        });
+
+        // Sync Audio
+        const targetAudio = activeAudioTracks.length > 0 ? activeAudioTracks[activeAudioTracks.length - 1] : null;
+        webcam.getAudioTracks().forEach(t => { if (t !== targetAudio) webcam.removeTrack(t); });
+        if (targetAudio && !webcam.getAudioTracks().includes(targetAudio)) webcam.addTrack(targetAudio);
+
+        // Sync Video
+        let targetWebcamVideo = null;
+        let targetScreenVideo = null;
+        
+        if (activeVideoTracks.length > 0) {
+            if (p.isScreenSharing) {
+                if (activeVideoTracks.length >= 2) {
+                    targetWebcamVideo = activeVideoTracks[0];
+                    targetScreenVideo = activeVideoTracks[activeVideoTracks.length - 1];
+                } else if (activeVideoTracks.length === 1 && !p.isCamOn) {
+                    targetScreenVideo = activeVideoTracks[0];
+                } else {
+                    targetWebcamVideo = activeVideoTracks[0];
+                }
+            } else {
+                targetWebcamVideo = activeVideoTracks[activeVideoTracks.length - 1];
+            }
+        }
+
+        webcam.getVideoTracks().forEach(t => { if (t !== targetWebcamVideo) webcam.removeTrack(t); });
+        if (targetWebcamVideo && !webcam.getVideoTracks().includes(targetWebcamVideo)) webcam.addTrack(targetWebcamVideo);
+
+        screen.getVideoTracks().forEach(t => { if (t !== targetScreenVideo) screen.removeTrack(t); });
+        if (targetScreenVideo && !screen.getVideoTracks().includes(targetScreenVideo)) screen.addTrack(targetScreenVideo);
+
+        webcamStream = webcam.getTracks().length > 0 ? webcam : null;
+        screenStream = screen.getTracks().length > 0 ? screen : null;
+    }
     
     return {
       id: p.socketId,
@@ -321,12 +414,13 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       name: isLocal ? (currentUser?.name || p.name) : (p.name || 'Convidado'),
       avatarUrl: isLocal ? (currentUser?.avatarUrl || currentUser?.avatar || p.avatarUrl) : p.avatarUrl,
       isLocal,
-      stream: isLocal ? cameraStream : userStreams.webcam,
+      stream: isLocal ? cameraStream : webcamStream,
       handRaised: isLocal ? isHandRaised : p.isHandRaised,
       isMicOn: isLocal ? isMicOn : p.isMicOn,
       isCamOn: isLocal ? isVideoOn : p.isCamOn,
-      isActuallySharing: isLocal ? screenSharing : !!userStreams.screen,
-      isScreenSharing: false
+      isActuallySharing: isLocal ? screenSharing : !!screenStream,
+      isScreenSharing: false,
+      _remoteScreenStream: screenStream // Save for later screen share virtual tile
     };
   });
 
@@ -370,17 +464,16 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     });
   }
 
-  Object.entries(streams).forEach(([sid, userStreams]) => {
-    if (userStreams.screen && userStreams.screen.active) {
-      const p = roomParticipants.find(part => part.socketId === sid);
+  participantsList.forEach(p => {
+    if (p._remoteScreenStream && p._remoteScreenStream.active) {
       allParticipants.push({
-        id: sid + '-screen',
-        uid: p?.uid,
-        stream: userStreams.screen,
+        id: p.id + '-screen',
+        uid: p.uid,
+        stream: p._remoteScreenStream,
         isLocal: false,
         isScreenSharing: true,
-        name: `Tela de ${p?.name || 'Convidado'}`,
-        avatarUrl: p?.avatarUrl,
+        name: `Tela de ${p.name || 'Convidado'}`,
+        avatarUrl: p.avatarUrl,
         handRaised: false, isMicOn: false, isCamOn: true
       });
     }

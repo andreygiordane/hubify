@@ -44,8 +44,8 @@ public class DocumentController {
 
             // Verificar se já existe (UPSERT)
             if (id != null && !id.isEmpty()) {
-                List<DocumentEntity> existing = repo.findByCollectionName(collection);
-                for (DocumentEntity doc : existing) {
+                List<DocumentEntity> candidates = repo.findByCollectionAndJsonId(collection, id);
+                for (DocumentEntity doc : candidates) {
                     try {
                         JsonNode existingJsonNode = objectMapper.readTree(doc.getJsonData());
                         JsonNode existingIdNode = existingJsonNode.get("id");
@@ -87,8 +87,8 @@ public class DocumentController {
             }
 
             // Procurar por ID dentro do JSON
-            List<DocumentEntity> docs = repo.findByCollectionName(collection);
-            for (DocumentEntity doc : docs) {
+            List<DocumentEntity> candidates = repo.findByCollectionAndJsonId(collection, id);
+            for (DocumentEntity doc : candidates) {
                 try {
                     JsonNode existingJsonNode = objectMapper.readTree(doc.getJsonData());
                     JsonNode existingIdNode = existingJsonNode.get("id");

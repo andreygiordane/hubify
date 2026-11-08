@@ -227,6 +227,10 @@ export const ChatProvider = ({ children }) => {
   // Persistência
   const viewRef = useRef(view);
   const processedCallsRef = useRef(new Set());
+  // Convites que EU enviei e ainda espero resposta (só eles podem me levar para a sala)
+  const outgoingCallIdsRef = useRef(new Set());
+  // Convites que já atendi/recusei: nunca devem tocar nem me puxar para a sala de novo
+  const handledCallsRef = useRef(new Set());
   const incomingCallRef = useRef(incomingCall);
   const isOutgoingCallRef = useRef(isOutgoingCall);
 
@@ -275,7 +279,8 @@ export const ChatProvider = ({ children }) => {
       });
 
       const callId = `call_${Date.now()}`;
-      
+      outgoingCallIdsRef.current = new Set([callId]);
+
       // Enviar convite de forma assíncrona para não travar a UI de discagem
       createDocument(`artifacts/${appId}/public/data/calls`, {
         id: callId,
@@ -378,7 +383,8 @@ export const ChatProvider = ({ children }) => {
       });
 
       const callId = `call_${Date.now()}`;
-      
+      outgoingCallIdsRef.current = new Set([callId]);
+
       // Enviar convite de forma assíncrona
       createDocument(`artifacts/${appId}/public/data/calls`, {
         id: callId,
@@ -811,8 +817,8 @@ export const ChatProvider = ({ children }) => {
         const isFromMe = callData.from === user.id;
         const isToMe = callData.to === user.id;
 
-        // Recebendo chamada
-        if (isToMe && callData.status === 'ringing') {
+        // Recebendo chamada (ignora convites que já atendi/recusei e ainda não sumiram do servidor)
+        if (isToMe && callData.status === 'ringing' && !handledCallsRef.current.has(callData.id) && viewRef.current !== 'room') {
           if (!incomingCallRef.current || incomingCallRef.current.id !== callData.id) {
             console.log(`[Chamada] Convite recebido: ${callData.id} para sala ${callData.roomId}`);
             setIncomingCall(callData);
@@ -820,18 +826,20 @@ export const ChatProvider = ({ children }) => {
           }
         }
 
-        // Chamada aceita (ambos entram)
-        if (callData.status === 'accepted' && callData.roomId && (isFromMe || isToMe)) {
-          if (viewRef.current !== 'room') {
+        // Chamada aceita: só leva para a sala quem ligou e está esperando ESTE convite.
+        // (quem atende já entrou em handleCallComplete; um convite antigo não pode puxar ninguém de volta)
+        if (callData.status === 'accepted' && callData.roomId && isFromMe) {
+          if (outgoingCallIdsRef.current.has(callData.id) && viewRef.current !== 'room') {
             console.log(`[Chamada] Conexão estabelecida na sala: ${callData.roomId}`);
+            outgoingCallIdsRef.current.clear();
             setActiveRoomId(callData.roomId);
             setIncomingCall(null);
             setIsOutgoingCall(false);
             setShowMediaSetup(false);
             setView('room');
           }
-          
-          if (isFromMe && !processedCallsRef.current.has(callData.id)) {
+
+          if (!processedCallsRef.current.has(callData.id)) {
             processedCallsRef.current.add(callData.id);
             setTimeout(() => removeDocument(`artifacts/${appId}/public/data/calls/${callData.id}`).catch(() => { }), 2000);
           }
@@ -839,11 +847,14 @@ export const ChatProvider = ({ children }) => {
 
         // Chamada recusada ou cancelada
         if ((callData.status === 'declined' || callData.status === 'cancelled') && (isFromMe || isToMe)) {
-          if (isOutgoingCallRef.current || incomingCallRef.current || viewRef.current === 'room') {
+          const isMyPendingCall = isFromMe && outgoingCallIdsRef.current.has(callData.id);
+          const isRingingForMe = isToMe && incomingCallRef.current?.id === callData.id;
+          if (isMyPendingCall || isRingingForMe) {
+            outgoingCallIdsRef.current.delete(callData.id);
             setIncomingCall(null);
-            setIsOutgoingCall(false);
             setShowMediaSetup(false);
-            if (isFromMe && callData.status === 'declined') {
+            if (isMyPendingCall && outgoingCallIdsRef.current.size === 0) setIsOutgoingCall(false);
+            if (isMyPendingCall && callData.status === 'declined' && viewRef.current !== 'room') {
               setSuccessMessage("Chamada recusada.");
               setShowSuccessModal(true);
             }
@@ -883,6 +894,7 @@ export const ChatProvider = ({ children }) => {
     setShowMediaSetup(false);
     if (incomingCall) {
       console.log(`[Chamada] Aceitando chamada ${incomingCall.id}. Sala: ${incomingCall.roomId}`);
+      handledCallsRef.current.add(incomingCall.id);
       const rId = incomingCall.roomId;
       setActiveRoomId(rId);
       localStorage.setItem('hubify_active_room_id', rId);
@@ -905,12 +917,28 @@ export const ChatProvider = ({ children }) => {
         await removeDocument(`artifacts/${appId}/public/data/calls/${callDoc.id}`);
       }
     }
+    if (incomingCall) handledCallsRef.current.add(incomingCall.id);
+    outgoingCallIdsRef.current.clear();
     setIsOutgoingCall(false);
     setIncomingCall(null);
     setShowMediaSetup(false);
   };
 
+  // Ninguém atendeu em 45s: cancela o convite para não deixar a tela "chamando" presa
+  useEffect(() => {
+    if (!isOutgoingCall) return;
+    const timer = setTimeout(() => {
+      if (!isOutgoingCallRef.current || viewRef.current === 'room') return;
+      handleCallCancel();
+      setSuccessMessage('Sem resposta.');
+      setShowSuccessModal(true);
+    }, 45000);
+    return () => clearTimeout(timer);
+  }, [isOutgoingCall]);
+
   const handleCallDecline = async (call) => {
+    handledCallsRef.current.add(call.id);
+    setIncomingCall(null);
     await patchDocument(`artifacts/${appId}/public/data/calls/${call.id}`, { status: 'declined' });
     setTimeout(() => {
       removeDocument(`artifacts/${appId}/public/data/calls/${call.id}`);
@@ -1057,6 +1085,7 @@ export const ChatProvider = ({ children }) => {
       setSelectedChatMobile(false);
     }
     
+    outgoingCallIdsRef.current.clear();
     setIsOutgoingCall(false);
     setOutgoingTarget(null);
     setIncomingCall(null);

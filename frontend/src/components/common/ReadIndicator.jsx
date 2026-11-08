@@ -1,29 +1,24 @@
 import React from 'react';
 
-export default function ReadIndicator({ isRead, size = 14 }) {
-  const gray = '#94a3b8';
-  const green = '#10b981';
+// Um tique cinza = enviada; dois tiques azuis = lida (como no WhatsApp)
+export default function ReadIndicator({ isRead, size = 16, className = '' }) {
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 24 24"
+      height={size * 0.7}
+      viewBox="0 0 16 11"
       fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label={isRead ? 'Mensagem lida' : 'Enviado'}
+      className={`${isRead ? 'text-chat-tick' : 'text-chat-meta'} ${className}`}
+      aria-label={isRead ? 'Mensagem lida' : 'Enviada'}
       role="img"
     >
-      {/* Single gray arrow when sent (not read) */}
-      {!isRead && (
-        <path d="M4 12l4 4 10-10" stroke={gray} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      )}
-
-      {/* Double green arrows when read (two ticks) */}
-      {isRead && (
+      {isRead ? (
         <>
-          <path d="M3.5 12.5l4 4 10-10" stroke={green} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M8 12.5l4 4 10-10" stroke={green} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M1 5.8l3.1 3.1L10.4 2.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M6.2 8.6l.4.3L13.4 2.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </>
+      ) : (
+        <path d="M3 5.8l3.1 3.1L12.4 2.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       )}
     </svg>
   );

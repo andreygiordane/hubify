@@ -1,26 +1,73 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  .animate-bounce-slow {
-    animation: bounce 2s infinite;
-  }
-  @keyframes bounce {
-    0%, 100% { transform: translateY(-5%); animation-timing-function: cubic-bezier(0.8,0,1,1); }
-    50% { transform: none; animation-timing-function: cubic-bezier(0,0,0.2,1); }
-  }
-  @keyframes pulse-soft {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.1); opacity: 0.7; shadow: 0 0 20px rgba(99, 102, 241, 0.4); }
-  }
-  .animate-pulse-soft {
-    animation: pulse-soft 2s infinite ease-in-out;
-  }
+/* ===== Tokens de tema (RGB sem vírgula para permitir opacidade no Tailwind) ===== */
+:root {
+  color-scheme: light;
+  --app: 245 245 245;
+  --surface: 255 255 255;
+  --subtle: 250 250 250;
+  --hover: 240 240 240;
+  --line: 224 224 224;
+  --ink: 36 36 36;
+  --ink-2: 97 97 97;
+  --ink-3: 140 140 140;
+  --brand: 91 95 199;
+  --brand-hover: 79 82 178;
+  --brand-soft: 232 235 250;
+  --brand-ink: 68 71 145;
+  --topbar: 51 52 74;
+  --rail: 235 235 235;
+  --danger: 196 49 75;
+  --danger-soft: 253 231 233;
+  --success: 19 161 14;
+  --warning: 234 163 0;
+
+  --chat-bg: 239 234 226;
+  --chat-header: 240 242 245;
+  --bubble-in: 255 255 255;
+  --bubble-out: 217 253 211;
+  --bubble-ink: 17 27 33;
+  --bubble-meta: 102 119 129;
+  --chat-accent: 0 168 132;
+  --tick-read: 83 189 235;
+  --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%23000' stroke-opacity='0.045' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 22h26a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H30l-8 6v-6h-4a6 6 0 0 1-6-6V28a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='112' cy='30' r='9'/%3E%3Cpath d='M128 70l4 8 9 1-7 6 2 9-8-5-8 5 2-9-7-6 9-1z'/%3E%3Cpath d='M20 110c8-8 16 8 24 0s16 8 24 0'/%3E%3Cpath d='M98 118l8 8 16-16'/%3E%3Crect x='60' y='60' width='22' height='16' rx='3'/%3E%3Cpath d='M64 60v-4a7 7 0 0 1 14 0v4'/%3E%3Cpath d='M136 132v12M130 138h12'/%3E%3Cpath d='M70 140a10 10 0 1 0 20 0'/%3E%3C/g%3E%3C/svg%3E");
 }
 
+.dark {
+  color-scheme: dark;
+  --app: 31 31 31;
+  --surface: 41 41 41;
+  --subtle: 36 36 36;
+  --hover: 56 56 56;
+  --line: 61 61 61;
+  --ink: 255 255 255;
+  --ink-2: 214 214 214;
+  --ink-3: 160 160 160;
+  --brand: 127 133 245;
+  --brand-hover: 148 153 245;
+  --brand-soft: 47 47 74;
+  --brand-ink: 170 174 255;
+  --topbar: 22 22 34;
+  --rail: 26 26 26;
+  --danger: 241 112 123;
+  --danger-soft: 62 31 37;
+  --success: 84 176 84;
+  --warning: 250 199 80;
+
+  --chat-bg: 11 20 26;
+  --chat-header: 32 44 51;
+  --bubble-in: 32 44 51;
+  --bubble-out: 0 92 75;
+  --bubble-ink: 233 237 239;
+  --bubble-meta: 165 180 190;
+  --chat-accent: 0 168 132;
+  --tick-read: 83 189 235;
+  --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cg fill='none' stroke='%23fff' stroke-opacity='0.035' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M18 22h26a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H30l-8 6v-6h-4a6 6 0 0 1-6-6V28a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='112' cy='30' r='9'/%3E%3Cpath d='M128 70l4 8 9 1-7 6 2 9-8-5-8 5 2-9-7-6 9-1z'/%3E%3Cpath d='M20 110c8-8 16 8 24 0s16 8 24 0'/%3E%3Cpath d='M98 118l8 8 16-16'/%3E%3Crect x='60' y='60' width='22' height='16' rx='3'/%3E%3Cpath d='M64 60v-4a7 7 0 0 1 14 0v4'/%3E%3Cpath d='M136 132v12M130 138h12'/%3E%3Cpath d='M70 140a10 10 0 1 0 20 0'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ===== Base ===== */
 html, body {
   margin: 0;
   padding: 0;
@@ -29,12 +76,13 @@ html, body {
   height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
   position: fixed;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #09090b; /* Darker background for the "locked" container effect */
-  color: #1e293b;
   touch-action: manipulation;
+}
+
+body {
+  @apply bg-app text-ink font-sans text-sm;
 }
 
 #root {
@@ -43,39 +91,16 @@ html, body {
   height: calc(var(--vh, 1vh) * 100);
   overflow: hidden;
   display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
-/* Locked App Container - Centers the app and maintains a crisp look on all screens */
 .app-viewport {
   width: 100%;
   height: 100%;
-  max-width: 100vw;
-  max-height: 100vh;
   max-height: calc(var(--vh, 1vh) * 100);
-  background-color: #f8fafc;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   position: relative;
-  box-shadow: 0 0 100px rgba(0,0,0,0.5);
-}
-
-@media (min-width: 2560px) {
-  .app-viewport {
-    max-width: 1920px;
-    max-height: 1080px;
-    border-radius: 24px;
-  }
-}
-
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 .h-dynamic-screen {
@@ -83,18 +108,81 @@ html, body {
   height: calc(var(--vh, 1vh) * 100);
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
-  border-radius: 10px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #cbd5e1;
+/* ===== Scrollbars discretas ===== */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgb(var(--ink-3) / 0.35) transparent; }
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(var(--ink-3) / 0.35); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink-3) / 0.6); }
+
+/* ===== Componentes reutilizáveis ===== */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 h-8 px-3 rounded-md text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-hover; }
+  .btn-secondary { @apply btn bg-surface text-ink border border-line hover:bg-hover; }
+  .btn-ghost { @apply btn text-ink-2 hover:bg-hover hover:text-ink; }
+  .btn-danger { @apply btn bg-danger text-white hover:opacity-90; }
+  .icon-btn {
+    @apply inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-2 hover:bg-hover hover:text-ink transition-colors;
+  }
+  .input {
+    @apply w-full h-8 px-3 rounded-md bg-surface text-ink placeholder:text-ink-3 border border-line border-b-2 border-b-ink-3/40 outline-none transition-colors focus:border-b-brand;
+  }
+  .card { @apply bg-surface rounded-lg shadow-card; }
+  .menu { @apply bg-surface rounded-lg shadow-pop border border-line/60 py-1 animate-pop-in; }
+  .menu-item { @apply w-full flex items-center gap-3 px-3 py-2 text-sm text-ink hover:bg-hover transition-colors text-left; }
+  .section-title { @apply text-xs font-semibold text-ink-2 uppercase tracking-wide; }
+  .pill { @apply inline-flex items-center gap-1 h-5 px-2 rounded-full text-[11px] font-semibold; }
 }
 
+/* ===== Conversa estilo WhatsApp ===== */
+.chat-wallpaper { background-color: rgb(var(--chat-bg)); }
+.wp-padrao { background-image: var(--doodle); background-size: 230px; }
+.wp-pontos { background-image: radial-gradient(rgb(var(--ink) / 0.07) 1.2px, transparent 1.2px); background-size: 18px 18px; }
+.wp-linhas { background-image: repeating-linear-gradient(45deg, rgb(var(--ink) / 0.035) 0 1px, transparent 1px 14px); }
+.wp-nenhum { background-image: none; }
 
+/* "Rabinho" do balão na primeira mensagem de cada sequência */
+.bubble-tail-in::before,
+.bubble-tail-out::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 13px;
+  background: inherit;
+}
+.bubble-tail-in::before { left: -8px; clip-path: polygon(100% 0, 0 0, 100% 100%); }
+.bubble-tail-out::before { right: -8px; clip-path: polygon(0 0, 100% 0, 0 100%); }
+
+/* Destaque ao pular para a mensagem respondida */
+.msg-highlight { animation: msg-flash 1.6s ease-out; }
+@keyframes msg-flash {
+  0%, 40% { background-color: rgb(var(--chat-accent) / 0.18); }
+  100% { background-color: transparent; }
+}
+
+/* Animações usadas nas telas de chamada */
+@layer utilities {
+  .animate-bounce-slow { animation: bounce 2s infinite; }
+  @keyframes pulse-soft {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.7; }
+  }
+  .animate-pulse-soft { animation: pulse-soft 2s infinite ease-in-out; }
+}
+
+/* Emoji picker acompanha o tema */
+.dark .EmojiPickerReact {
+  --epr-bg-color: rgb(var(--surface));
+  --epr-category-label-bg-color: rgb(var(--surface));
+  --epr-text-color: rgb(var(--ink));
+  --epr-hover-bg-color: rgb(var(--hover));
+  --epr-search-input-bg-color: rgb(var(--subtle));
+  --epr-picker-border-color: rgb(var(--line));
+}

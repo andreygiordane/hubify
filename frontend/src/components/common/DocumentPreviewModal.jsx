@@ -14,22 +14,22 @@ export default function DocumentPreviewModal() {
 
   return (
     <div 
-      className="fixed inset-0 z-[100] flex items-center justify-center p-2 md:p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-2 md:p-4 bg-black/40 animate-fade-in duration-300"
       onClick={() => setPreviewDocument(null)}
     >
       <div 
-        className="bg-white w-full max-w-5xl h-[90vh] md:h-[85vh] rounded-[2rem] md:rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300"
+        className="bg-surface w-full max-w-5xl h-[90vh] md:h-[85vh] rounded-lg md:rounded-lg shadow-pop flex flex-col overflow-hidden animate-fade-in duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 md:p-6 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+        <div className="p-4 md:p-6 border-b border-line flex items-center justify-between bg-surface shrink-0">
           <div className="flex items-center gap-3 md:gap-4 overflow-hidden">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-indigo-50 rounded-xl md:rounded-2xl flex items-center justify-center text-indigo-600 shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-brand-soft rounded-md md:rounded-lg flex items-center justify-center text-brand shrink-0">
               {isImage ? <ImageIcon size={20} /> : <FileText size={20} />}
             </div>
             <div className="min-w-0">
-              <h3 className="font-black text-slate-800 truncate text-sm md:text-base">{name}</h3>
-              <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest">{(size / 1024 / 1024).toFixed(2)} MB</p>
+              <h3 className="font-semibold text-ink truncate text-sm md:text-base">{name}</h3>
+              <p className="text-[9px] md:text-[10px] font-semibold text-ink-3 uppercase">{(size / 1024 / 1024).toFixed(2)} MB</p>
             </div>
           </div>
           
@@ -37,7 +37,7 @@ export default function DocumentPreviewModal() {
             <a 
               href={data} 
               download={name}
-              className="flex items-center justify-center w-10 h-10 md:w-auto md:px-6 md:py-3 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black text-sm hover:bg-indigo-700 transition-all active:scale-95 shadow-lg shadow-indigo-100"
+              className="flex items-center justify-center w-10 h-10 md:w-auto md:px-6 md:py-3 bg-brand text-white rounded-md md:rounded-lg font-semibold text-sm hover:bg-brand-hover transition-all active:scale-95 shadow-card"
               title="Download"
             >
               <Download size={18} />
@@ -45,7 +45,7 @@ export default function DocumentPreviewModal() {
             </a>
             <button 
               onClick={() => setPreviewDocument(null)}
-              className="w-10 h-10 flex items-center justify-center text-slate-400 hover:bg-slate-100 rounded-xl md:rounded-2xl transition-all bg-slate-50 border border-slate-100"
+              className="w-10 h-10 flex items-center justify-center text-ink-3 hover:bg-hover rounded-md md:rounded-lg transition-all bg-subtle border border-line"
               aria-label="Fechar"
             >
               <X size={20} />
@@ -54,24 +54,24 @@ export default function DocumentPreviewModal() {
         </div>
 
         {/* Preview Content */}
-        <div className="flex-1 overflow-auto bg-slate-50 flex items-center justify-center p-4 md:p-8">
+        <div className="flex-1 overflow-auto bg-subtle flex items-center justify-center p-4 md:p-8">
           {isImage ? (
-            <img src={data} alt={name} className="max-w-full max-h-full object-contain rounded-xl shadow-lg" />
+            <img src={data} alt={name} className="max-w-full max-h-full object-contain rounded-md shadow-card" />
           ) : isPDF ? (
-            <iframe src={data} title={name} className="w-full h-full rounded-xl border-none shadow-lg" />
+            <iframe src={data} title={name} className="w-full h-full rounded-md border-none shadow-card" />
           ) : (
-            <div className="bg-white p-12 rounded-[3rem] shadow-xl border border-slate-100 flex flex-col items-center text-center max-w-md">
-              <div className="w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center text-slate-300 mb-6">
+            <div className="bg-surface p-12 rounded-lg shadow-card border border-line flex flex-col items-center text-center max-w-md">
+              <div className="w-24 h-24 bg-subtle rounded-lg flex items-center justify-center text-ink-3 mb-6">
                 <FileText size={48} />
               </div>
-              <h4 className="text-xl font-black text-slate-800 mb-2">Visualização indisponível</h4>
-              <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+              <h4 className="text-xl font-semibold text-ink mb-2">Visualização indisponível</h4>
+              <p className="text-sm text-ink-2 font-medium mb-8 leading-relaxed">
                 No momento, o Hubify suporta visualização direta apenas para Imagens e PDFs. Para outros arquivos, faça o download para abrir em seu dispositivo.
               </p>
               <a 
                 href={data} 
                 download={name}
-                className="w-full bg-slate-100 text-slate-600 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
+                className="w-full bg-hover text-ink-2 py-4 rounded-lg font-semibold hover:bg-hover transition-all"
               >
                 Baixar agora
               </a>

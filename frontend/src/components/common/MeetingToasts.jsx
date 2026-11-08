@@ -17,31 +17,31 @@ export default function MeetingToasts() {
       {meetingNotifications.map((notif) => (
         <div 
           key={notif.id}
-          className="w-80 bg-white border border-slate-100 rounded-[2rem] shadow-2xl p-6 pointer-events-auto animate-in slide-in-from-right-full duration-500 overflow-hidden relative group"
+          className="w-80 bg-surface border border-line rounded-lg shadow-pop p-6 pointer-events-auto animate-fade-in slide-in-from-right-full duration-500 overflow-hidden relative group"
         >
           {/* Barra de Progresso de Expiração (Simulada) */}
-          <div className="absolute bottom-0 left-0 h-1 bg-indigo-600 animate-shrink-width" style={{ animationDuration: '30s' }}></div>
+          <div className="absolute bottom-0 left-0 h-1 bg-brand animate-shrink-width" style={{ animationDuration: '30s' }}></div>
           
           <button 
             onClick={() => removeNotification(notif.id)}
-            className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-slate-600 hover:bg-slate-50 rounded-full transition-all"
+            className="absolute top-4 right-4 p-1.5 text-ink-3 hover:text-ink-2 hover:bg-subtle rounded-full transition-all"
           >
             <X size={16} />
           </button>
 
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl">
+            <div className="p-2.5 bg-brand-soft text-brand rounded-lg">
               <Video size={20} />
             </div>
             <div>
-              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{notif.label || 'Inicia em breve'}</p>
-              <h4 className="text-sm font-bold text-slate-800 truncate max-w-[180px]">{notif.title}</h4>
+              <p className="text-[10px] font-semibold text-brand uppercase">{notif.label || 'Inicia em breve'}</p>
+              <h4 className="text-sm font-bold text-ink truncate max-w-[180px]">{notif.title}</h4>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 mb-5 text-slate-400">
-            <Clock size={14} className="text-slate-300" />
-            <span className="text-xs font-bold uppercase tracking-widest">
+          <div className="flex items-center gap-2 mb-5 text-ink-3">
+            <Clock size={14} className="text-ink-3" />
+            <span className="text-xs font-bold uppercase">
               {notif.type === 'host_joined' ? 'Já começou' : 
                notif.type === '0m' ? 'Agora' : 
                notif.type === '5m' ? 'Em 5 minutos' : 'Em 10 minutos'}
@@ -53,7 +53,7 @@ export default function MeetingToasts() {
               handleStartMeeting(`meeting_${notif.id}`);
               removeNotification(notif.id);
             }}
-            className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+            className="w-full bg-brand text-white py-3.5 rounded-lg font-semibold text-xs uppercase hover:bg-brand-hover transition-all shadow-card flex items-center justify-center gap-2"
           >
             Entrar na Chamada <ArrowRight size={14} />
           </button>

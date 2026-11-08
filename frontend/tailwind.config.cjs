@@ -35,7 +35,7 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['"Segoe UI"', '"Segoe UI Web (West European)"', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Roboto', '"Helvetica Neue"', 'sans-serif'],
+        sans: ['Inter', '"Segoe UI"', '-apple-system', 'BlinkMacSystemFont', 'Roboto', '"Helvetica Neue"', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 2px rgb(0 0 0 / 0.08), 0 0 1px rgb(0 0 0 / 0.08)',

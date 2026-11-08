@@ -65,7 +65,10 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  // Detecta mais rápido aparelhos que sumiram sem avisar (navegador do celular fechado)
+  pingInterval: 10000,
+  pingTimeout: 10000
 });
 
 io.engine.on("connection_error", (err) => {
@@ -79,6 +82,34 @@ const setOnline = (uid, isOnline) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isOnline })
   }).catch(e => console.error(`[STATUS] Error updating presence for ${uid}:`, e.message));
+};
+
+// Presença: sockets abertos por usuário. Só fica offline quando o último aparelho desconecta.
+const userSockets = new Map(); // uid -> Set(socketId)
+const offlineTimers = new Map(); // uid -> timeout (tolerância para reconexões rápidas)
+
+const registerPresence = (socket, uid) => {
+  if (!uid || socket.userId === uid) return;
+  socket.userId = uid;
+  if (!userSockets.has(uid)) userSockets.set(uid, new Set());
+  const sockets = userSockets.get(uid);
+  sockets.add(socket.id);
+  clearTimeout(offlineTimers.get(uid));
+  offlineTimers.delete(uid);
+  if (sockets.size === 1) setOnline(uid, true);
+};
+
+const unregisterPresence = (socket) => {
+  const uid = socket.userId;
+  const sockets = uid && userSockets.get(uid);
+  if (!sockets) return;
+  sockets.delete(socket.id);
+  if (sockets.size > 0) return;
+  userSockets.delete(uid);
+  offlineTimers.set(uid, setTimeout(() => {
+    offlineTimers.delete(uid);
+    if (!userSockets.has(uid)) setOnline(uid, false);
+  }, 5000));
 };
 
 // State
@@ -98,8 +129,7 @@ io.on('connection', (socket) => {
     try {
       if (!roomId) return;
       socket.join(roomId);
-      if (uid && !socket.userId) setOnline(uid, true);
-      socket.userId = uid; // Store for disconnect logic
+      registerPresence(socket, uid);
 
       if (!rooms[roomId]) rooms[roomId] = new Map();
       const isNew = !rooms[roomId].has(socket.id);
@@ -115,6 +145,9 @@ io.on('connection', (socket) => {
       console.error(`Error joining room:`, e);
     }
   });
+
+  // Cada aparelho se identifica ao conectar (não depende de abrir uma conversa)
+  socket.on('presence', ({ uid }) => registerPresence(socket, uid));
 
   socket.on('update-user-state', ({ roomId, state }) => {
     try {
@@ -199,7 +232,7 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`[-] User disconnected: ${socket.id} | Active connections: ${io.engine.clientsCount}`);
     // Notificar o backend que o usuário ficou offline, mas preservar o status de texto
-    if (socket.userId) setOnline(socket.userId, false);
+    unregisterPresence(socket);
 
     for (const roomId in rooms) {
       if (rooms[roomId].delete(socket.id)) {

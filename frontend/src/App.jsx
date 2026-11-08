@@ -10,7 +10,7 @@ import Calendar from './pages/Calendar';
 import Contacts from './pages/Contacts';
 import Invitations from './pages/Invitations';
 import MeetingRoom from './pages/MeetingRoom';
-import SettingsProfile from './pages/SettingsProfile';
+import Settings from './pages/Settings';
 import Modals from './components/modals/Modals';
 import { useViewportHeight } from './hooks/useViewportHeight';
 
@@ -43,7 +43,7 @@ export default function App() {
           {view === 'calendar' && <Calendar />}
           {view === 'contacts' && <Contacts />}
           {view === 'invitations' && <Invitations />}
-          {view === 'settings' && <SettingsProfile />}
+          {view === 'settings' && <Settings />}
         </MainLayout>
       )}
       <Modals />

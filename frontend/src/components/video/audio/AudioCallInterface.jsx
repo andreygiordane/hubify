@@ -1,3 +1,4 @@
+import { applyOutputDevice } from '../../../media/prefs';
 import React, { useState, useEffect, useRef } from "react";
 import { useChat } from '../../../context/ChatContext';
 import { useCallLogic } from '../logic/useCallLogic';
@@ -114,6 +115,7 @@ function RemoteAudio({ stream, id }) {
   return (
     <audio
       ref={audioRef}
+      onLoadedMetadata={(e) => applyOutputDevice(e.currentTarget)}
       autoPlay
       playsInline
       style={{ display: 'none' }}

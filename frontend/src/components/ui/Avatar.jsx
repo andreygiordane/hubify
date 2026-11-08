@@ -23,6 +23,8 @@ export const PRESENCE = {
 
 export const presenceOf = (person) => {
   if (!person) return 'offline';
+  // Sem nenhum aparelho conectado = offline, qualquer que seja o último status escolhido
+  if (person.isOnline === false) return 'offline';
   if (person.status && person.status !== 'online' && PRESENCE[person.status]) return person.status;
   return person.isOnline || person.status === 'online' ? 'online' : 'offline';
 };

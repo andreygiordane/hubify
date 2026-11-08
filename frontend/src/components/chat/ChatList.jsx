@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, MoreVertical, BellOff, Bell, Trash2, Info, PenSquare, Users as UsersIcon, MessageSquare, ChevronRight, Camera, FileText, Pencil } from 'lucide-react';
+import { Search, X, MoreHorizontal, BellOff, Bell, Trash2, Info, Plus, Users as UsersIcon, MessageSquare, ChevronRight, Camera, FileText, LogOut } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChat } from '../../context/ChatContext';
 import Avatar, { presenceOf } from '../ui/Avatar';
@@ -7,7 +7,7 @@ import ReadIndicator from '../common/ReadIndicator';
 import { formatListTime } from '../../utils/format';
 
 const FILTERS = [
-  { id: 'all', label: 'Tudo' },
+  { id: 'all', label: 'Todas' },
   { id: 'unread', label: 'Não lidas' },
   { id: 'groups', label: 'Grupos' },
 ];
@@ -46,78 +46,76 @@ export default function ChatList({
   const pendingInvites = groupInvites?.filter(i => i.toId === user?.id && i.status === 'pending').length || 0;
 
   return (
-    <div className="w-full bg-surface flex flex-col h-full overflow-hidden">
-      <div className="px-4 pt-4 pb-2">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold text-ink">Chat</h2>
-          <div className="relative flex items-center gap-1">
-            <button onClick={() => setShowDMModal(true)} className="icon-btn" title="Nova conversa">
-              <PenSquare className="w-[18px] h-[18px]" />
-            </button>
-            <button onClick={() => setShowAddMenu(!showAddMenu)} className={`icon-btn ${showAddMenu ? 'bg-hover text-ink' : ''}`} title="Mais opções">
-              <MoreVertical className="w-[18px] h-[18px]" />
-            </button>
-            {showAddMenu && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
-                <div className="menu absolute right-0 top-full mt-1 w-52 z-50">
-                  <button onClick={() => { setShowDMModal(true); setShowAddMenu(false); }} className="menu-item">
-                    <MessageSquare className="w-4 h-4 text-ink-2" /> Nova conversa
-                  </button>
-                  <button onClick={() => { setShowGroupModal(true); setShowAddMenu(false); }} className="menu-item">
-                    <UsersIcon className="w-4 h-4 text-ink-2" /> Novo grupo
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4" />
+    <div className="w-full bg-subtle flex flex-col h-full overflow-hidden">
+      <div className="h-14 md:h-12 shrink-0 px-3 flex items-center gap-2 border-b border-line md:shadow-[0_1px_0_rgb(0_0_0/0.15)]">
+        <h2 className="md:hidden text-lg font-bold text-ink mr-auto">Conversas</h2>
+        <div className="relative flex-1 hidden md:block">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
           <input
-            type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Pesquisar ou começar uma nova conversa"
-            className="w-full h-9 bg-subtle dark:bg-hover rounded-lg pl-9 pr-8 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-1 focus:ring-chat-accent"
+            placeholder="Encontrar conversa"
+            className="w-full h-8 rounded-md bg-app pl-8 pr-7 text-sm text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-brand/50"
           />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink">
-              <X className="w-4 h-4" />
-            </button>
-          )}
+          {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink"><X className="w-3.5 h-3.5" /></button>}
         </div>
-
-        <div className="flex gap-2 mt-3">
-          {FILTERS.map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`h-7 px-3 rounded-full text-[13px] transition-colors ${filter === f.id ? 'bg-chat-accent/15 text-chat-accent font-semibold' : 'bg-subtle dark:bg-hover text-ink-2 hover:bg-hover'}`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="relative">
+          <button onClick={() => setShowAddMenu(!showAddMenu)} className={`icon-btn ${showAddMenu ? 'bg-hover text-ink' : ''}`} title="Nova conversa ou grupo">
+            <Plus className="w-5 h-5" />
+          </button>
+          {showAddMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
+              <div className="menu absolute right-0 top-full mt-1 w-52 z-50">
+                <button onClick={() => { setShowDMModal(true); setShowAddMenu(false); }} className="menu-item">
+                  <MessageSquare className="w-4 h-4 text-ink-2" /> Nova conversa
+                </button>
+                <button onClick={() => { setShowGroupModal(true); setShowAddMenu(false); }} className="menu-item">
+                  <UsersIcon className="w-4 h-4 text-ink-2" /> Novo grupo
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
+      <div className="md:hidden px-3 pt-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Pesquisar conversas" className="w-full h-10 rounded-lg bg-app pl-9 pr-3 text-[15px] text-ink placeholder:text-ink-3 outline-none" />
+        </div>
+      </div>
+
+      <div className="flex gap-1 px-3 pt-3 pb-1">
+        {FILTERS.map(f => (
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`h-7 px-2.5 rounded-md text-[13px] font-medium transition-colors ${filter === f.id ? 'bg-hover text-ink' : 'text-ink-3 hover:text-ink-2 hover:bg-hover/60'}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
       {pendingInvites > 0 && (
-        <button onClick={onViewInvitations} className="mx-3 mb-1 flex items-center gap-3 px-3 py-2.5 rounded-lg bg-brand-soft text-brand-ink hover:brightness-95 transition">
-          <UsersIcon className="w-5 h-5" />
-          <span className="flex-1 text-left text-sm font-semibold">
-            {pendingInvites} convite{pendingInvites > 1 ? 's' : ''} para grupo pendente{pendingInvites > 1 ? 's' : ''}
+        <button onClick={onViewInvitations} className="mx-2 mt-1 flex items-center gap-3 px-3 py-2 rounded-md bg-brand-soft text-brand-ink hover:brightness-110 transition">
+          <UsersIcon className="w-4 h-4" />
+          <span className="flex-1 text-left text-sm font-medium">
+            {pendingInvites} convite{pendingInvites > 1 ? 's' : ''} para grupo
           </span>
           <ChevronRight className="w-4 h-4" />
         </button>
       )}
 
-      <div className="flex-1 overflow-y-auto pb-24 md:pb-2 custom-scrollbar">
+      <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Mensagens diretas e grupos</p>
+
+      <div className="flex-1 overflow-y-auto pb-24 md:pb-2 px-2 custom-scrollbar">
         {filteredRooms.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-8 py-16 text-center">
-            <MessageSquare className="w-10 h-10 text-ink-3 mb-3" strokeWidth={1.5} />
-            <p className="text-ink-2">
-              {searchQuery ? 'Nenhuma conversa encontrada' : filter === 'unread' ? 'Nenhuma conversa não lida' : filter === 'groups' ? 'Você ainda não participa de grupos' : 'Nenhuma conversa ainda'}
+          <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <MessageSquare className="w-9 h-9 text-ink-3 mb-3" strokeWidth={1.5} />
+            <p className="text-sm text-ink-2">
+              {searchQuery ? 'Nenhuma conversa encontrada' : filter === 'unread' ? 'Tudo lido por aqui' : filter === 'groups' ? 'Você ainda não participa de grupos' : 'Nenhuma conversa ainda'}
             </p>
             {!searchQuery && filter === 'all' && (
               <button onClick={() => setShowDMModal(true)} className="btn-primary mt-4">Iniciar conversa</button>
@@ -169,14 +167,15 @@ export default function ChatList({
               >
                 <button onClick={() => { toggleMuteRoom?.(activeMenuData.roomId); closeMenu(); }} className="menu-item">
                   {mutedRooms?.includes(activeMenuData.roomId) ? <Bell className="w-4 h-4 text-ink-2" /> : <BellOff className="w-4 h-4 text-ink-2" />}
-                  {mutedRooms?.includes(activeMenuData.roomId) ? 'Reativar notificações' : 'Silenciar notificações'}
+                  {mutedRooms?.includes(activeMenuData.roomId) ? 'Reativar notificações' : 'Silenciar'}
                 </button>
                 <button onClick={() => { setActiveRoomId(activeMenuData.roomId); setSelectedChatMobile(activeMenuData.room); setShowChatInfo(true); closeMenu(); }} className="menu-item">
-                  <Info className="w-4 h-4 text-ink-2" /> Dados {activeMenuData.room.isGroup ? 'do grupo' : 'do contato'}
+                  <Info className="w-4 h-4 text-ink-2" /> {activeMenuData.room.isGroup ? 'Dados do grupo' : 'Ver perfil'}
                 </button>
                 <div className="border-t border-line my-1" />
                 <button onClick={() => { setRoomToDelete(activeMenuData.room); closeMenu(); }} className="menu-item text-danger">
-                  <Trash2 className="w-4 h-4" /> {activeMenuData.room.isGroup ? 'Sair do grupo' : 'Apagar conversa'}
+                  {activeMenuData.room.isGroup ? <LogOut className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+                  {activeMenuData.room.isGroup ? 'Sair do grupo' : 'Apagar conversa'}
                 </button>
               </motion.div>
             </>
@@ -208,14 +207,15 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
 
   const mine = lastMsg && lastMsg.senderId === user?.id;
   const p = preview(lastMsg);
-  const senderPrefix = room.isGroup && lastMsg && !mine ? `${(lastMsg.senderName || '').split(' ')[0]}: ` : '';
+  const senderPrefix = room.isGroup && lastMsg && !mine ? `${(lastMsg.senderName || '').split(' ')[0]}: ` : mine ? 'Você: ' : '';
+  const highlight = isActive || unreadCount > 0;
 
   return (
-    <div className="relative group">
+    <div className="relative group my-0.5">
       {/* Ações ao arrastar para o lado (celular) */}
-      <div className="absolute inset-0 md:hidden flex justify-end">
+      <div className="absolute inset-0 md:hidden flex justify-end rounded-md overflow-hidden">
         <button onClick={(e) => { e.stopPropagation(); onOpenMenu(e.currentTarget.getBoundingClientRect()); }} className="w-[70px] bg-ink-3 flex items-center justify-center text-white">
-          <MoreVertical size={22} />
+          <MoreHorizontal size={22} />
         </button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="w-[70px] bg-danger flex items-center justify-center text-white">
           <Trash2 size={22} />
@@ -229,46 +229,43 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
         dragDirectionLock
         dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
         onClick={onOpen}
-        className={`relative z-10 flex items-center gap-3 pl-3 cursor-pointer transition-colors ${isActive ? 'bg-hover' : 'bg-surface hover:bg-subtle dark:hover:bg-hover/60'}`}
+        className={`relative z-10 flex items-center gap-3 px-2 py-2 md:py-1.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-hover' : 'bg-subtle hover:bg-hover/60'}`}
         style={{ touchAction: 'pan-y' }}
       >
-        <Avatar src={room.avatarUrl} name={room.name} size={48} status={presence} />
+        <Avatar src={room.avatarUrl} name={room.name} size={isMobile ? 48 : 36} status={presence} square={room.isGroup} />
 
-        <div className="flex-1 min-w-0 py-3 pr-3 border-b border-line/70">
+        <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className="text-[15px] text-ink truncate">{room.name}</h3>
-            <span className={`text-xs shrink-0 ${unreadCount > 0 ? 'text-chat-accent font-semibold' : 'text-ink-3'}`}>
-              {lastMsg ? formatListTime(lastMsg.timestamp) : ''}
-            </span>
+            <h3 className={`truncate text-[15px] md:text-sm ${highlight ? 'text-ink font-semibold' : 'text-ink-2 font-medium'}`}>{room.name}</h3>
+            <span className="text-[11px] shrink-0 text-ink-3">{lastMsg ? formatListTime(lastMsg.timestamp) : ''}</span>
           </div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className={`flex-1 min-w-0 flex items-center gap-1 text-[13px] ${unreadCount > 0 ? 'text-ink font-medium' : 'text-ink-2'}`}>
+          <div className="flex items-center gap-1.5">
+            <p className={`flex-1 min-w-0 flex items-center gap-1 text-[13px] md:text-xs ${unreadCount > 0 ? 'text-ink-2' : 'text-ink-3'}`}>
               {typing.length > 0 ? (
-                <span className="text-chat-accent font-medium truncate">digitando...</span>
+                <span className="text-brand font-medium truncate">digitando...</span>
               ) : (
                 <>
-                  {mine && <ReadIndicator isRead={isRead} size={16} className="shrink-0" />}
+                  {mine && !room.isGroup && <ReadIndicator isRead={isRead} size={14} className="shrink-0" />}
                   {p.icon && <p.icon className="w-3.5 h-3.5 shrink-0" />}
                   <span className="truncate">{senderPrefix}{p.text}</span>
-                  {lastMsg?.isEdited && <Pencil className="w-3 h-3 shrink-0 opacity-60" />}
                 </>
               )}
             </p>
             {isMuted && <BellOff className="w-3.5 h-3.5 text-ink-3 shrink-0" />}
             {unreadCount > 0 && (
-              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-chat-accent text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                 {unreadCount}
               </span>
             )}
-            <button
-              onClick={(e) => { e.stopPropagation(); onOpenMenu(e.currentTarget.getBoundingClientRect()); }}
-              className="hidden md:flex w-6 h-6 -mr-1 items-center justify-center rounded text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Opções"
-            >
-              <MoreVertical size={16} />
-            </button>
           </div>
         </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onOpenMenu(e.currentTarget.getBoundingClientRect()); }}
+          className="hidden md:flex absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 items-center justify-center rounded-md bg-hover text-ink-3 hover:text-ink opacity-0 group-hover:opacity-100 transition-opacity"
+          title="Opções"
+        >
+          <MoreHorizontal size={16} />
+        </button>
       </motion.div>
     </div>
   );

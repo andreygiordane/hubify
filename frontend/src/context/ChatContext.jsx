@@ -1,4 +1,5 @@
 
+import { getPrefs } from '../media/prefs';
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
   getDatabase, getCollectionPath, getDocumentPath, listenToCollection,
@@ -216,6 +217,7 @@ export const ChatProvider = ({ children }) => {
 
   const playNotificationSound = (roomId = null) => {
     if (roomId && (mutedRoomsRef.current || []).includes(roomId)) return;
+    if (!getPrefs().notificationSound) return;
     
     notificationAudio.current.currentTime = 0;
     notificationAudio.current.play().catch(e => {
@@ -602,6 +604,7 @@ export const ChatProvider = ({ children }) => {
 
     newSocket.on('connect', () => {
       console.log(`[SOCKET_CONNECT] Connected with ID: ${newSocket.id}`);
+      newSocket.emit('presence', { uid: user.id });
       // If there's an active room, join it immediately
       if (activeRoomIdRef.current && view !== 'room') {
         const profileAvatar = currentUserProfile?.avatarUrl || currentUserProfile?.avatar;

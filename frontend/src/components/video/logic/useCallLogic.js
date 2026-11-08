@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Peer } from '../utils/WebRTCUtils';
 import { loadIceServers } from '../utils/iceServers';
+import { audioConstraints, videoConstraints } from '../../../media/prefs';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
   // Sala da chamada separada da sala do chat: quem só está com o chat aberto não vira participante,
@@ -226,7 +227,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     console.log(`[Media] Obtendo mídia local na sala: ${roomId}`);
 
     // Tentar obter Media (Async)
-    navigator.mediaDevices.getUserMedia({ video: !isVoiceMode, audio: true })
+    navigator.mediaDevices.getUserMedia({ video: isVoiceMode ? false : videoConstraints(), audio: audioConstraints() })
       .then(stream => {
         console.log(`[Media] Local stream obtido com sucesso`);
         localStreamRef.current = stream;
@@ -295,7 +296,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       const videoTrack = cameraStream.getVideoTracks()[0];
       if (videoTrack && videoTrack.readyState === 'ended') {
         try {
-          const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const newStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints() });
           const newVideoTrack = newStream.getVideoTracks()[0];
           cameraStream.removeTrack(videoTrack);
           cameraStream.addTrack(newVideoTrack);

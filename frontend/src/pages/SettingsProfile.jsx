@@ -23,12 +23,13 @@ const avatars = avatarSeeds.map((seed) =>
   `https://api.dicebear.com/7.x/big-smile/svg?seed=${seed}&backgroundColor=f87171,fb923c,fbbf24,4ade80,60a5fa,818cf8,a78bfa,f472b6&v=5`
 );
 
-export default function SettingsProfile() {
+// Seções "Meu perfil" e "Senha" da tela de Configurações
+export default function SettingsProfile({ section = 'profile' }) {
   const { user, currentUserProfile } = useAuth();
   const { handleUpdateProfile, setView } = useChat();
   const fileInputRef = React.useRef(null);
 
-  const [activeTab, setActiveTab] = useState('profile');
+  const activeTab = section;
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -160,46 +161,13 @@ export default function SettingsProfile() {
   };
 
   return (
-    <div className="flex-1 bg-subtle overflow-y-auto">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="bg-surface border border-line rounded-lg shadow-sm overflow-hidden">
-          <div className="px-4 sm:px-8 py-4 sm:py-6 border-b border-line flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setView('chat')}
-                className="w-10 h-10 rounded-md border border-line text-ink-2 hover:bg-subtle flex items-center justify-center"
-                aria-label="Voltar"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <h1 className="text-lg sm:text-2xl font-semibold text-ink">Configurações da Conta</h1>
-                <p className="text-xs sm:text-sm text-ink-2">Gerencie seu perfil e segurança em uma página única.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-4 sm:px-8 pt-4">
-            <div className="inline-flex bg-hover rounded-lg p-1 w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab('profile')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-bold transition-colors ${activeTab === 'profile' ? 'bg-surface text-ink shadow' : 'text-ink-2'}`}
-              >
-                <span className="inline-flex items-center gap-2"><UserCircle className="w-4 h-4" /> Perfil</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('security')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-bold transition-colors ${activeTab === 'security' ? 'bg-surface text-ink shadow' : 'text-ink-2'}`}
-              >
-                <span className="inline-flex items-center gap-2"><Shield className="w-4 h-4" /> Senha</span>
-              </button>
-            </div>
-          </div>
-
+    <div>
+      <div>
+        <div>
           {(error || success) && (
             <div className="px-4 sm:px-8 pt-4">
-              {error && <div className="p-3 rounded-md bg-danger-soft border border-red-100 text-danger text-sm font-medium">{error}</div>}
-              {success && <div className="p-3 rounded-md bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm font-medium">{success}</div>}
+              {error && <div className="p-3 rounded-md bg-danger-soft border border-danger/30 text-danger text-sm font-medium">{error}</div>}
+              {success && <div className="p-3 rounded-md bg-success/15 border border-success/30 text-success text-sm font-medium">{success}</div>}
             </div>
           )}
 

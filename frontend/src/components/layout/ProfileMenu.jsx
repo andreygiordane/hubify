@@ -1,5 +1,5 @@
 import React from 'react';
-import { User as UserIcon, LogOut, Sun, Moon, Monitor, Check } from 'lucide-react';
+import { Settings, LogOut, Sun, Moon, Monitor, Check } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
 import { useTheme } from '../../theme';
@@ -56,7 +56,7 @@ export default function ProfileMenu({ className = '' }) {
 
       <div className="border-t border-line my-1" />
       <button onClick={() => { setView('settings'); close(); }} className="menu-item px-4">
-        <UserIcon className="w-4 h-4 text-ink-2" /> Perfil e segurança
+        <Settings className="w-4 h-4 text-ink-2" /> Configurações
       </button>
       <button onClick={logout} className="menu-item px-4 text-danger">
         <LogOut className="w-4 h-4" /> Sair

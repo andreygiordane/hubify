@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
-// Tema: 'light' | 'dark' | 'system' (padrão), salvo por navegador
+// Tema: 'light' | 'dark' (padrão) | 'system', salvo por navegador
 const KEY = 'hubify_theme';
 const media = window.matchMedia('(prefers-color-scheme: dark)');
 
 const read = () => {
-  try { return localStorage.getItem(KEY) || 'system'; } catch { return 'system'; }
+  try { return localStorage.getItem(KEY) || 'dark'; } catch { return 'dark'; }
 };
 
 const apply = (pref) => {

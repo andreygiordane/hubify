@@ -1,3 +1,5 @@
+import HiddenAudio from '../shared/HiddenAudio';
+import { applyOutputDevice } from '../../../media/prefs';
 import React, { useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Signal, Hand, ShieldCheck, VideoOff, ZoomIn, RotateCcw, Monitor } from "lucide-react";
@@ -35,8 +37,9 @@ function MobileVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fal
     <div className={`relative w-full h-full bg-[#080808] border-[0.5px] border-white/5 flex items-center justify-center overflow-hidden transition-all duration-300 
       ${handRaised ? 'ring-inset ring-2 ring-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.4)]' : isSpeaking ? 'ring-inset ring-2 ring-blue-500/20' : ''}`}>
 
+      {stream && !isLocal && !muted && !isCamOn && <HiddenAudio stream={stream} />}
       {stream && isCamOn ? (
-        <video ref={ref} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
+        <video ref={ref} onLoadedMetadata={(e) => !isLocal && applyOutputDevice(e.currentTarget)} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[#0a0a0a]">
           {avatarUrl ? (

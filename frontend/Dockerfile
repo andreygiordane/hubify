@@ -9,9 +9,9 @@ COPY . .
 ARG VITE_API_URL
 ARG VITE_SOCKET_URL
 
-# Set env vars no build
-ENV VITE_API_URL=${VITE_API_URL:-http://localhost:8082/api}
-ENV VITE_SOCKET_URL=${VITE_SOCKET_URL:-http://localhost:8080}
+# Set env vars no build (vazias = mesmo domínio do frontend, via proxy do nginx)
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_SOCKET_URL=${VITE_SOCKET_URL}
 
 RUN npm run build
 

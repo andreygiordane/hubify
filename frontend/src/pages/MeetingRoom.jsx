@@ -3,16 +3,6 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import MeetingInterface from '../components/video/MeetingInterface';
-import { io } from 'socket.io-client';
-
-const getSocketUrl = () => {
-  const envUrl = import.meta.env.VITE_SOCKET_URL;
-  if (envUrl) return envUrl;
-  
-  return 'http://localhost:8080';
-};
-
-const SOCKET_URL = getSocketUrl();
 
 export default function MeetingRoom() {
   const { user, currentUserProfile, setUserStatus } = useAuth();

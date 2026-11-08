@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Peer } from '../utils/WebRTCUtils';
+import { loadIceServers } from '../utils/iceServers';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
+  // Sala da chamada separada da sala do chat: quem só está com o chat aberto não vira participante,
+  // e sair da chamada não tira o socket da sala do chat (digitando, leitura etc.)
+  const callRoomId = `call:${roomId}`;
   const [streams, setStreams] = useState({}); // { [peerID]: { webcam: Stream, screen: Stream } }
   const [localStream, setLocalStream] = useState(null);
   const [cameraStream, setCameraStream] = useState(null);
@@ -71,10 +75,18 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
   useEffect(() => {
     console.log(`[Componente] useCallLogic montado para sala: ${roomId} | Socket: ${socket?.id || 'Desconectado'}`);
     if (socket && roomId && currentUser) {
-      const handleInit = () => {
+      let cancelled = false;
+      let joined = false;
+      const handleInit = async () => {
         console.log(`[Socket] Gatilho de inicialização disparado para ${socket.id}`);
+        // Garante que os peers sejam criados já com as credenciais TURN
+        await loadIceServers();
+        if (cancelled) return;
+        // Socket reconectou (ex.: troca de Wi-Fi para 4G): o id mudou e os peers antigos não servem mais
+        if (joined) resetPeers();
+        joined = true;
         socket.emit("join-room", {
-          roomId,
+          roomId: callRoomId,
           uid: currentUser.uid,
           name: currentUser.name,
           avatarUrl: currentUser.avatarUrl
@@ -82,17 +94,23 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         initMedia();
       };
 
-      if (socket.connected) {
-        handleInit();
-      } else {
-        socket.once('connect', handleInit);
-      }
+      if (socket.connected) handleInit();
+      socket.on('connect', handleInit);
 
       return () => {
-        socket.emit('leave-room', { roomId });
+        cancelled = true;
+        socket.off('connect', handleInit);
+        socket.emit('leave-room', { roomId: callRoomId });
       };
     }
   }, [socket, roomId]);
+
+  const resetPeers = () => {
+    peersRef.current.forEach(({ peer }) => peer.destroy());
+    peersRef.current = [];
+    streamsCache.current = {};
+    setStreams({});
+  };
 
   // Gerenciamento de Listeners (Prevenção de Duplicidade)
   useEffect(() => {
@@ -143,6 +161,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         existing.peer.signal(payload.signal);
         return;
       }
+      // Só uma oferta abre conexão nova; candidatos soltos são de um peer que já foi descartado
+      if (payload.signal?.type !== 'offer') return;
       console.log(`[Socket] Sinal recebido de ${payload.callerID}. Respondendo...`);
       const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
       peersRef.current.push({ peerID: payload.callerID, peer });
@@ -182,7 +202,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   useEffect(() => {
     if (socket && roomId) {
-      socket.emit('update-user-state', { roomId, state: { isMicOn, isCamOn: isVideoOn, isHandRaised, isScreenSharing: screenSharing } });
+      socket.emit('update-user-state', { roomId: callRoomId, state: { isMicOn, isCamOn: isVideoOn, isHandRaised, isScreenSharing: screenSharing } });
     }
   }, [isMicOn, isVideoOn, isHandRaised, screenSharing]);
 
@@ -327,7 +347,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const handleSendMessage = (text) => {
     const msg = { sender: currentUser.name, text };
-    socket.emit('send-chat', { roomId, message: msg });
+    socket.emit('send-chat', { roomId: callRoomId, message: msg });
   };
 
   const inviteUser = async (targetId, handleInviteToCall) => {
@@ -342,8 +362,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const handleExit = () => {
     if (socket && roomId) {
-      if (roomId.startsWith('dm_')) socket.emit('end-call', { roomId });
-      else socket.emit('leave-room', { roomId });
+      if (roomId.startsWith('dm_')) socket.emit('end-call', { roomId: callRoomId });
+      else socket.emit('leave-room', { roomId: callRoomId });
     }
     onLeave();
   };

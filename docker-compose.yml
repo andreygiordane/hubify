@@ -38,22 +38,71 @@ services:
     container_name: hubify-video-server
     ports:
       - "8080:8080"
+    environment:
+      - BACKEND_URL=http://backend:8081/api
+      # TURN é obrigatório para chamadas entre redes diferentes. Configure UMA das opções no arquivo .env:
+      # 1) Cloudflare TURN (gratuito até 1TB/mês)
+      - CLOUDFLARE_TURN_KEY_ID=${CLOUDFLARE_TURN_KEY_ID:-}
+      - CLOUDFLARE_TURN_API_TOKEN=${CLOUDFLARE_TURN_API_TOKEN:-}
+      # 2) coturn próprio (serviço "coturn" abaixo) ou outro provedor
+      - TURN_URLS=${TURN_URLS:-}
+      - TURN_SECRET=${TURN_SECRET:-}
+      - TURN_USERNAME=${TURN_USERNAME:-}
+      - TURN_CREDENTIAL=${TURN_CREDENTIAL:-}
+    restart: always
+
+  # Servidor TURN próprio (opcional): docker compose --profile turn up
+  # Precisa rodar em uma máquina com IP público e as portas abaixo liberadas no firewall.
+  coturn:
+    image: coturn/coturn:4.6.2
+    container_name: hubify-coturn
+    profiles: ["turn"]
+    command: >
+      -n --log-file=stdout --fingerprint --no-cli
+      --listening-port=3478 --min-port=49160 --max-port=49200
+      --use-auth-secret --static-auth-secret=${TURN_SECRET:-}
+      --realm=hubify --external-ip=${TURN_EXTERNAL_IP:-}
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
     restart: always
 
   frontend:
     build:
       context: ./frontend
-      args:
-        VITE_API_URL: http://localhost:8082/api
-        VITE_SOCKET_URL: http://localhost:8080
     container_name: hubify-frontend
     ports:
       - "5173:8080"
-    environment:
-      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Frontend, /api e /socket.io no mesmo endereço (http://localhost:5173)
+      - ./frontend/nginx.docker.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
       - video-server
+    restart: always
+
+  # Link HTTPS público temporário para testar de outra rede: docker compose --profile tunnel up
+  # O endereço (https://....trycloudflare.com) aparece no log: docker compose logs tunnel
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    container_name: hubify-tunnel
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate --url http://frontend:8080
+    depends_on:
+      - frontend
+
+  # Domínio próprio (ex.: https://hubify.site) via Cloudflare Tunnel: docker compose --profile site up -d
+  # Requer TUNNEL_TOKEN no .env (Cloudflare Zero Trust > Networks > Tunnels) e o hostname apontando para http://frontend:8080
+  site:
+    image: cloudflare/cloudflared:2026.10.0
+    container_name: hubify-site
+    profiles: ["site"]
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN:-}
+    depends_on:
+      - frontend
     restart: always
 
 volumes:

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Mail, Lock, User, ArrowRight, Check, UserCircle, Mic, Headphones, Video, MessageCircle, Shield, ChevronLeft, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from './config';
 
 const passwordRequirements = [
   { id: 'length', label: 'Mínimo de 8 caracteres', test: (pw) => pw.length >= 8 },
@@ -67,7 +68,7 @@ export default function Auth({ onLogin }) {
     setLoading(true);
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = API_URL;
       const base = apiUrl || '';
       let payload = formData;
       if (isLogin) {
@@ -118,7 +119,7 @@ export default function Auth({ onLogin }) {
 
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = API_URL;
       const res = await fetch(`${apiUrl}/auth/users/${mustUpdateUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

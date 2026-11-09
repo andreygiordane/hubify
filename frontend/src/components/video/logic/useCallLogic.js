@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Peer } from '../utils/WebRTCUtils';
+import { loadIceServers } from '../utils/iceServers';
+import { audioConstraints, videoConstraints } from '../../../media/prefs';
 
 export function useCallLogic({ roomId, currentUser, socket, callType, onLeave }) {
+  // Sala da chamada separada da sala do chat: quem só está com o chat aberto não vira participante,
+  // e sair da chamada não tira o socket da sala do chat (digitando, leitura etc.)
+  const callRoomId = `call:${roomId}`;
   const [streams, setStreams] = useState({}); // { [peerID]: { webcam: Stream, screen: Stream } }
   const [localStream, setLocalStream] = useState(null);
   const [cameraStream, setCameraStream] = useState(null);
@@ -67,32 +72,55 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     screenStreamRef.current = screenStream;
   }, [screenStream]);
 
+  // Callbacks atuais sem precisar re-registrar os listeners do socket a cada render
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+  const unmountedRef = useRef(false);
+  useEffect(() => () => { unmountedRef.current = true; }, []);
+
   // Efeito de Entrada e Saída da Sala (Estrito)
   useEffect(() => {
     console.log(`[Componente] useCallLogic montado para sala: ${roomId} | Socket: ${socket?.id || 'Desconectado'}`);
     if (socket && roomId && currentUser) {
-      const handleInit = () => {
-        console.log(`[Socket] Gatilho de inicialização disparado para ${socket.id}`);
+      let cancelled = false;
+      let joined = false;
+      const handleInit = async () => {
+        // Câmera/microfone e TURN em paralelo, ANTES de entrar: as conexões já nascem com a mídia
+        // (sem renegociação extra, que atrasava o vídeo aparecer)
+        await Promise.all([loadIceServers(), ensureMedia()]);
+        if (cancelled || !socket.connected) return;
+        // Socket reconectou (ex.: troca de Wi-Fi para 4G): o id mudou e os peers antigos não servem mais
+        if (joined) resetPeers();
+        joined = true;
+        const me = currentUserRef.current;
         socket.emit("join-room", {
-          roomId,
-          uid: currentUser.uid,
-          name: currentUser.name,
-          avatarUrl: currentUser.avatarUrl
+          roomId: callRoomId,
+          uid: me.uid,
+          name: me.name,
+          avatarUrl: me.avatarUrl
         });
-        initMedia();
+        socket.emit('update-user-state', { roomId: callRoomId, state: stateRef.current });
       };
 
-      if (socket.connected) {
-        handleInit();
-      } else {
-        socket.once('connect', handleInit);
-      }
+      if (socket.connected) handleInit();
+      socket.on('connect', handleInit);
 
       return () => {
-        socket.emit('leave-room', { roomId });
+        cancelled = true;
+        socket.off('connect', handleInit);
+        socket.emit('leave-room', { roomId: callRoomId });
       };
     }
   }, [socket, roomId]);
+
+  const resetPeers = () => {
+    peersRef.current.forEach(({ peer }) => peer.destroy());
+    peersRef.current = [];
+    streamsCache.current = {};
+    setStreams({});
+  };
 
   // Gerenciamento de Listeners (Prevenção de Duplicidade)
   useEffect(() => {
@@ -115,7 +143,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
     socket.off('receive-chat');
     socket.on('receive-chat', msg => {
-      const isSelf = msg.sender === currentUser?.name;
+      const isSelf = msg.sender === currentUserRef.current?.name;
       setMessages(prev => [...prev, {
         sender: msg.sender,
         text: msg.text,
@@ -125,7 +153,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     });
 
     socket.off('call-ended');
-    socket.on('call-ended', () => onLeave());
+    socket.on('call-ended', () => onLeaveRef.current());
 
     socket.off('user-connected');
     socket.on('user-connected', userId => {
@@ -143,6 +171,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         existing.peer.signal(payload.signal);
         return;
       }
+      // Só uma oferta abre conexão nova; candidatos soltos são de um peer que já foi descartado
+      if (payload.signal?.type !== 'offer') return;
       console.log(`[Socket] Sinal recebido de ${payload.callerID}. Respondendo...`);
       const peer = addPeer(payload.signal, payload.callerID, localStreamRef.current);
       peersRef.current.push({ peerID: payload.callerID, peer });
@@ -178,13 +208,20 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       socket.off('receiving-returned-signal');
       socket.off('user-disconnected');
     };
-  }, [socket, roomId, onLeave, currentUser]);
+  }, [socket, roomId]);
 
+  const stateRef = useRef(null);
+  // Os IDs dizem a quem assiste qual stream é a câmera e qual é a tela (o ID chega igual do outro lado)
+  stateRef.current = {
+    isMicOn, isCamOn: isVideoOn, isHandRaised, isScreenSharing: screenSharing,
+    cameraStreamId: localStream?.id || null,
+    screenStreamId: screenSharing ? (screenStream?.id || null) : null
+  };
   useEffect(() => {
     if (socket && roomId) {
-      socket.emit('update-user-state', { roomId, state: { isMicOn, isCamOn: isVideoOn, isHandRaised, isScreenSharing: screenSharing } });
+      socket.emit('update-user-state', { roomId: callRoomId, state: stateRef.current });
     }
-  }, [isMicOn, isVideoOn, isHandRaised, screenSharing]);
+  }, [isMicOn, isVideoOn, isHandRaised, screenSharing, localStream, screenStream]);
 
   // Removido temporariamente para evitar kicks acidentais
   /*
@@ -198,31 +235,63 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     }
   }, [roomParticipants, roomId, hasConnected, onLeave]);
   */
-  const isInitializingMedia = useRef(false);
-  const initMedia = async () => {
-    if (!socket || !socket.connected || isInitializingMedia.current || localStreamRef.current) return;
-
-    isInitializingMedia.current = true;
-    console.log(`[Media] Obtendo mídia local na sala: ${roomId}`);
-
-    // Tentar obter Media (Async)
-    navigator.mediaDevices.getUserMedia({ video: !isVoiceMode, audio: true })
-      .then(stream => {
-        console.log(`[Media] Local stream obtido com sucesso`);
-        localStreamRef.current = stream;
-        setLocalStream(stream);
-        setCameraStream(stream);
-        // Adicionar o stream a todos os peers já conectados
-        peersRef.current.forEach(({ peer }) => {
-          try { peer.addStream(stream); } catch (e) {}
-        });
-      })
-      .catch(err => {
-        console.error(`[Media] Erro ao obter stream local:`, err);
-      })
-      .finally(() => {
-        isInitializingMedia.current = false;
+  // Obtém a mídia local uma única vez (várias chamadas aguardam a mesma promessa)
+  const mediaPromiseRef = useRef(null);
+  const ensureMedia = () => {
+    if (mediaPromiseRef.current) return mediaPromiseRef.current;
+    const useStream = (stream) => {
+      if (unmountedRef.current) {
+        // Saiu da chamada antes da câmera abrir: não deixa a câmera ligada
+        stream.getTracks().forEach(t => t.stop());
+        return null;
+      }
+      console.log(`[Media] Local stream obtido (V/A): ${stream.getVideoTracks().length}/${stream.getAudioTracks().length}`);
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      setCameraStream(stream);
+      // Peers criados antes da mídia (reconexão) passam a enviá-la
+      peersRef.current.forEach(({ peer }) => {
+        try { peer.addStream(stream); } catch (e) {}
       });
+      return stream;
+    };
+    mediaPromiseRef.current = navigator.mediaDevices.getUserMedia({ video: isVoiceMode ? false : videoConstraints(), audio: audioConstraints() })
+      .then(useStream)
+      .catch(err => {
+        console.error(`[Media] Erro ao obter câmera/microfone:`, err);
+        if (isVoiceMode) return null;
+        // Câmera ocupada ou negada: entra só com áudio em vez de ficar sem nada
+        setIsVideoOn(false);
+        return navigator.mediaDevices.getUserMedia({ audio: audioConstraints() })
+          .then(useStream)
+          .catch(e => { console.error('[Media] Sem microfone também:', e); return null; });
+      });
+    return mediaPromiseRef.current;
+  };
+
+  // Stream remoto chegou: guarda e redesenha sempre que uma faixa entra, sai ou termina
+  // (sem isso a tela fica presa numa faixa que já morreu, ex.: depois de parar o compartilhamento)
+  const watchedStreams = useRef(new WeakSet());
+  const addRemoteStream = (peerID, s) => {
+    console.log(`[WebRTC] Stream de ${peerID} (${s.id}). Tracks (V/A): ${s.getVideoTracks().length}/${s.getAudioTracks().length}`);
+    if (!watchedStreams.current.has(s)) {
+      watchedStreams.current.add(s);
+      const refresh = () => setStreams(prev => {
+        const entry = prev[peerID];
+        if (!entry) return prev;
+        // Stream sem nenhuma faixa (tela encerrada) sai da lista
+        return { ...prev, [peerID]: { list: entry.list.filter(st => st.getTracks().length > 0) } };
+      });
+      const watchTrack = (t) => { t.addEventListener('ended', refresh); t.addEventListener('mute', refresh); t.addEventListener('unmute', refresh); };
+      s.getTracks().forEach(watchTrack);
+      s.addEventListener('addtrack', (e) => { watchTrack(e.track); refresh(); });
+      s.addEventListener('removetrack', refresh);
+    }
+    setStreams(prev => {
+      const existing = prev[peerID] || { list: [] };
+      if (existing.list.includes(s)) return { ...prev, [peerID]: { list: [...existing.list] } };
+      return { ...prev, [peerID]: { list: [...existing.list, s] } };
+    });
   };
 
   const createPeer = (userToSignal, callerID, stream) => {
@@ -230,17 +299,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     peer.on("signal", signal => {
       socket.emit("sending-signal", { userToSignal, callerID, signal });
     });
-    peer.on("stream", s => {
-      console.log(`[WebRTC] Stream recebido de ${userToSignal}. Tracks (V/A): ${s.getVideoTracks().length}/${s.getAudioTracks().length}`);
-      setStreams(prev => {
-        const existing = prev[userToSignal] || { list: [] };
-        // Atualizar a lista de streams, prevenindo duplicatas exatas, ou substituindo stream id se necessário
-        if (!existing.list.find(st => st.id === s.id)) {
-            return { ...prev, [userToSignal]: { list: [...existing.list, s] } };
-        }
-        return prev;
-      });
-    });
+    peer.on("stream", s => addRemoteStream(userToSignal, s));
     return peer;
   };
 
@@ -249,16 +308,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
     peer.on("signal", signal => {
       socket.emit("returning-signal", { signal, callerID });
     });
-    peer.on("stream", s => {
-      console.log(`[WebRTC] Stream retornado de ${callerID}. Tracks (V/A): ${s.getVideoTracks().length}/${s.getAudioTracks().length}`);
-      setStreams(prev => {
-        const existing = prev[callerID] || { list: [] };
-        if (!existing.list.find(st => st.id === s.id)) {
-            return { ...prev, [callerID]: { list: [...existing.list, s] } };
-        }
-        return prev;
-      });
-    });
+    peer.on("stream", s => addRemoteStream(callerID, s));
     peer.signal(incomingSignal);
     return peer;
   };
@@ -275,7 +325,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
       const videoTrack = cameraStream.getVideoTracks()[0];
       if (videoTrack && videoTrack.readyState === 'ended') {
         try {
-          const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          const newStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints() });
           const newVideoTrack = newStream.getVideoTracks()[0];
           cameraStream.removeTrack(videoTrack);
           cameraStream.addTrack(newVideoTrack);
@@ -327,7 +377,7 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const handleSendMessage = (text) => {
     const msg = { sender: currentUser.name, text };
-    socket.emit('send-chat', { roomId, message: msg });
+    socket.emit('send-chat', { roomId: callRoomId, message: msg });
   };
 
   const inviteUser = async (targetId, handleInviteToCall) => {
@@ -342,8 +392,8 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
 
   const handleExit = () => {
     if (socket && roomId) {
-      if (roomId.startsWith('dm_')) socket.emit('end-call', { roomId });
-      else socket.emit('leave-room', { roomId });
+      if (roomId.startsWith('dm_')) socket.emit('end-call', { roomId: callRoomId });
+      else socket.emit('leave-room', { roomId: callRoomId });
     }
     onLeave();
   };
@@ -366,46 +416,37 @@ export function useCallLogic({ roomId, currentUser, socket, callType, onLeave })
         }
 
         const { webcam, screen } = cached;
-        const activeAudioTracks = [];
-        const activeVideoTracks = [];
-        
-        userStreamsList.forEach(s => {
-            s.getAudioTracks().forEach(t => { if (t.readyState === 'live') activeAudioTracks.push(t); });
-            s.getVideoTracks().forEach(t => { if (t.readyState === 'live') activeVideoTracks.push(t); });
-        });
+        const live = (tracks) => tracks.filter(t => t.readyState === 'live' && !t.muted);
+
+        // Tela: só o stream que o participante anunciou como tela, enquanto compartilha
+        const screenSource = p.isScreenSharing && p.screenStreamId
+          ? userStreamsList.find(st => st.id === p.screenStreamId)
+          : null;
+        // Câmera: o stream anunciado como câmera; sem anúncio (versão antiga), o primeiro que não é a tela
+        const cameraSource = userStreamsList.find(st => st.id === p.cameraStreamId)
+          || userStreamsList.find(st => st.id !== p.screenStreamId && st !== screenSource && live(st.getVideoTracks().concat(st.getAudioTracks())).length > 0)
+          || null;
 
         // Sync Audio
-        const targetAudio = activeAudioTracks.length > 0 ? activeAudioTracks[activeAudioTracks.length - 1] : null;
+        const targetAudio = cameraSource ? (live(cameraSource.getAudioTracks())[0] || cameraSource.getAudioTracks()[0] || null) : null;
         webcam.getAudioTracks().forEach(t => { if (t !== targetAudio) webcam.removeTrack(t); });
         if (targetAudio && !webcam.getAudioTracks().includes(targetAudio)) webcam.addTrack(targetAudio);
 
         // Sync Video
-        let targetWebcamVideo = null;
-        let targetScreenVideo = null;
-        
-        if (activeVideoTracks.length > 0) {
-            if (p.isScreenSharing) {
-                if (activeVideoTracks.length >= 2) {
-                    targetWebcamVideo = activeVideoTracks[0];
-                    targetScreenVideo = activeVideoTracks[activeVideoTracks.length - 1];
-                } else if (activeVideoTracks.length === 1 && !p.isCamOn) {
-                    targetScreenVideo = activeVideoTracks[0];
-                } else {
-                    targetWebcamVideo = activeVideoTracks[0];
-                }
-            } else {
-                targetWebcamVideo = activeVideoTracks[activeVideoTracks.length - 1];
-            }
+        const targetWebcamVideo = cameraSource ? (cameraSource.getVideoTracks().find(t => t.readyState === 'live') || null) : null;
+        const targetScreenVideo = screenSource ? (live(screenSource.getVideoTracks())[0] || null) : null;
+
+        // Faixa de vídeo trocou: stream novo para o <video> reanexar (senão fica no quadro da faixa antiga).
+        // Sem troca, mantém o mesmo objeto para não piscar.
+        if ((webcam.getVideoTracks()[0] || null) !== targetWebcamVideo) {
+          cached.webcam = new MediaStream([...webcam.getAudioTracks(), ...(targetWebcamVideo ? [targetWebcamVideo] : [])]);
+        }
+        if ((screen.getVideoTracks()[0] || null) !== targetScreenVideo) {
+          cached.screen = new MediaStream(targetScreenVideo ? [targetScreenVideo] : []);
         }
 
-        webcam.getVideoTracks().forEach(t => { if (t !== targetWebcamVideo) webcam.removeTrack(t); });
-        if (targetWebcamVideo && !webcam.getVideoTracks().includes(targetWebcamVideo)) webcam.addTrack(targetWebcamVideo);
-
-        screen.getVideoTracks().forEach(t => { if (t !== targetScreenVideo) screen.removeTrack(t); });
-        if (targetScreenVideo && !screen.getVideoTracks().includes(targetScreenVideo)) screen.addTrack(targetScreenVideo);
-
-        webcamStream = webcam.getTracks().length > 0 ? webcam : null;
-        screenStream = screen.getTracks().length > 0 ? screen : null;
+        webcamStream = cached.webcam.getTracks().length > 0 ? cached.webcam : null;
+        screenStream = cached.screen.getTracks().length > 0 ? cached.screen : null;
     }
     
     return {

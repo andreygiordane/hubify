@@ -4,7 +4,7 @@
  * Centralized communication layer for Hubify platform backend.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+import { API_URL } from './config';
 
 // Database core functions
 export const getDatabase = () => ({});
@@ -20,11 +20,15 @@ export const getDocumentPath = (db, ...paths) => {
 /**
  * Real-time listener for collection changes
  */
-export const listenToCollection = (path, callback) => {
+export const listenToCollection = (path, callback, intervalMs = 5000) => {
   let interval;
   let lastHash = '';
+  let inFlight = false;
   
   const fetchPath = async () => {
+    // Aba em segundo plano não precisa atualizar; nem empilhar requisições se a rede estiver lenta
+    if (inFlight || document.hidden) return;
+    inFlight = true;
     try {
       let url = '';
       const isUser = path.includes('users');
@@ -78,13 +82,59 @@ export const listenToCollection = (path, callback) => {
         
         callback({ docs: mappedDocs });
       }
-    } catch (e) {}
+    } catch (e) {
+    } finally {
+      inFlight = false;
+    }
   };
 
+  const onVisible = () => { if (!document.hidden) fetchPath(); };
   fetchPath();
-  interval = setInterval(fetchPath, 2000);
+  interval = setInterval(fetchPath, intervalMs);
+  document.addEventListener('visibilitychange', onVisible);
   
-  return () => clearInterval(interval);
+  return () => {
+    clearInterval(interval);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
+};
+
+/**
+ * Mensagens alteradas desde `since` (hora do servidor) nas DMs do usuário e nos grupos.
+ * Retorna { messages, cursor } — cursor é o maior updatedAt recebido.
+ */
+export const syncMessages = async ({ since = 0, userId, groupIds = [] }) => {
+  const params = new URLSearchParams({ since: String(since) });
+  if (userId) params.set('user', userId);
+  if (groupIds.length) params.set('groups', groupIds.join(','));
+  let res = await fetch(`${API_URL}/data/messages/sync?${params}`);
+  let rows;
+  if (res.status === 404 || res.status === 405) {
+    // Backend ainda sem a rota de sincronização (não foi atualizado): baixa tudo e filtra aqui
+    res = await fetch(`${API_URL}/data/messages?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`Mensagens respondeu ${res.status}`);
+    const groups = new Set(groupIds);
+    rows = (await res.json()).filter(row => {
+      try {
+        const roomId = JSON.parse(row.jsonData).roomId || '';
+        return (userId && roomId.startsWith('dm_') && roomId.includes(userId)) || groups.has(roomId);
+      } catch (e) { return false; }
+    }).map(row => ({ ...row, updatedAt: row.updatedAt ?? 0 }));
+    // Sem updatedAt no backend antigo: o cursor fica em 0 e cada sincronização relê tudo
+    since = 0;
+  } else {
+    if (!res.ok) throw new Error(`Sync respondeu ${res.status}`);
+    rows = await res.json();
+  }
+  let cursor = since;
+  const messages = [];
+  rows.forEach(row => {
+    try {
+      messages.push({ ...JSON.parse(row.jsonData), updatedAt: row.updatedAt });
+      if (row.updatedAt > cursor) cursor = row.updatedAt;
+    } catch (e) {}
+  });
+  return { messages, cursor };
 };
 
 /**
@@ -109,30 +159,6 @@ export const createDocument = async (path, data) => {
     } catch (err) {
       console.error('API Error (createDocument):', err);
     }
-  }
-};
-
-const mergeDocumentData = async (collectionName, docId, data) => {
-  try {
-    const response = await fetch(`${API_URL}/data/${collectionName}?t=${Date.now()}`);
-    if (!response.ok) return { id: docId, ...data };
-
-    const docs = await response.json();
-    const existingDoc = docs.find(d => {
-      try {
-        const existingData = JSON.parse(d.jsonData);
-        return existingData.id === docId;
-      } catch (e) {
-        return false;
-      }
-    });
-
-    if (!existingDoc) return { id: docId, ...data };
-
-    const existingData = JSON.parse(existingDoc.jsonData);
-    return { ...existingData, ...data, id: docId };
-  } catch (err) {
-    return { id: docId, ...data };
   }
 };
 
@@ -170,12 +196,13 @@ export const saveDocument = async (path, data, options = {}) => {
     url = `${API_URL}/data/${collectionName}`;
 
     try {
-      const payload = shouldMerge ? await mergeDocumentData(collectionName, docId, data) : { id: docId, ...data };
-      const response = await fetch(url, {
-        method: 'POST',
+      // Merge é feito no servidor: não precisa baixar a coleção inteira antes
+      const response = await fetch(shouldMerge ? `${url}/${encodeURIComponent(docId)}` : url, {
+        method: shouldMerge ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ id: docId, ...data })
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return await response.json();
     } catch (err) {
       console.error(`API Error (saveDocument ${collectionName}):`, err);

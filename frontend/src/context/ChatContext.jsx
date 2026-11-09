@@ -1,18 +1,37 @@
 
+import { getPrefs } from '../media/prefs';
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import {
-  getDatabase, getCollectionPath, getDocumentPath, listenToCollection,
-  fetchCollection, patchDocument, saveDocument, removeDocument, createDocument
+  getDatabase, listenToCollection, syncMessages,
+  fetchCollection, patchDocument, saveDocument, removeDocument
 } from '../api-client';
 import { useAuth } from './AuthContext';
 import { io } from 'socket.io-client';
+import { loadIceServers } from '../components/video/utils/iceServers';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
-const SOCKET_OPTIONS = { 
+import { SOCKET_URL } from '../config';
+const SOCKET_OPTIONS = {
   transports: ['polling', 'websocket'],
-  reconnectionAttempts: 10,
-  reconnectionDelay: 2000,
+  // Nunca desiste de reconectar (celular que dormiu, troca de rede)
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
   timeout: 20000
+};
+
+const SAFETY_SYNC_MS = 15000; // rede de segurança caso algum evento do socket se perca
+const SYNC_OVERLAP_MS = 5000; // reconsulta um pouco antes do cursor (gravações simultâneas)
+const TYPING_TTL_MS = 6000;
+
+// IDs de usuário são UUID. Versões antigas chegaram a gravar dois IDs grudados numa mesma entrada
+// ("<id1><id2>"): extrair todos os UUIDs recupera os contatos certos.
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const extractUserIds = (val) => [...new Set(String(val || '').match(UUID_RE) || [])];
+
+const parseJson = (val, fallback) => {
+  if (!val) return fallback;
+  if (typeof val !== 'string') return val;
+  try { return JSON.parse(val); } catch (e) { return fallback; }
 };
 
 const ChatContext = createContext();
@@ -44,38 +63,38 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
+  // Diferença entre o relógio do servidor e o deste aparelho: ordem das mensagens e "lida" não
+  // podem depender do relógio de cada celular
+  const clockOffsetRef = useRef(0);
+  const serverNow = () => Date.now() + clockOffsetRef.current;
+
+  // Grava a leitura no perfil (para outros aparelhos/recarregar) sem fazer um PUT por mensagem
+  const readSaveTimer = useRef(null);
+  const persistReadTimestamps = (next) => {
+    clearTimeout(readSaveTimer.current);
+    readSaveTimer.current = setTimeout(() => {
+      saveDocument(`artifacts/hubify/public/data/users/${user.id}`, { readTimestamps: JSON.stringify(next) }, { merge: true })
+        .catch(err => console.error('[MARK_READ] Erro ao salvar leitura:', err));
+    }, 1500);
+  };
+
   const markRoomAsRead = async (roomId) => {
     if (!roomId || !user?.id) return;
 
-    const now = Date.now();
-    console.log(`[MARK_READ] Marking room ${roomId} as read at ${new Date(now).toISOString()}`);
-    
-    setReadTimestamps(prev => {
-      if ((prev[roomId] || 0) >= now) {
-        console.log(`[MARK_READ] Room ${roomId} already marked as read more recently`);
-        return prev;
-      }
-
-      const next = { ...prev, [roomId]: now };
-      console.log(`[MARK_READ] Updated local readTimestamps:`, next);
-      
-      handleUpdateProfile({ readTimestamps: JSON.stringify(next) }).catch(err => {
-        console.error(`[MARK_READ] Error updating profile:`, err);
-      });
-
-      if (socketRef.current) {
-        console.log(`[MARK_READ] Emitting messages-read event via socket`);
-        socketRef.current.emit('messages-read', {
-          roomId,
-          userId: user.id,
-          timestamp: now
-        });
-      } else {
-        console.warn(`[MARK_READ] Socket not available for room ${roomId}`);
-      }
-
+    const apply = (ts) => setReadTimestamps(prev => {
+      if ((prev[roomId] || 0) >= ts) return prev;
+      const next = { ...prev, [roomId]: ts };
+      persistReadTimestamps(next);
       return next;
     });
+
+    const s = socketRef.current;
+    if (s?.connected) {
+      // O servidor carimba a hora da leitura e avisa o outro lado (✓✓)
+      s.timeout(5000).emit('messages-read', { roomId }, (err, res) => apply(!err && res?.ok ? res.timestamp : serverNow()));
+    } else {
+      apply(serverNow());
+    }
   };
 
   const [groups, setGroups] = useState([]);
@@ -114,13 +133,14 @@ export const ChatProvider = ({ children }) => {
   };
   
   useEffect(() => {
-    if (currentUserProfile?.readTimestamps) {
-      try {
-        setReadTimestamps(JSON.parse(currentUserProfile.readTimestamps));
-      } catch (e) {
-        setReadTimestamps({});
-      }
-    }
+    const saved = parseJson(currentUserProfile?.readTimestamps, null);
+    if (!saved) return;
+    // Mescla: o perfil salvo pode estar atrás do que já foi lido neste aparelho
+    setReadTimestamps(prev => {
+      const next = { ...prev };
+      Object.entries(saved).forEach(([roomId, ts]) => { next[roomId] = Math.max(next[roomId] || 0, ts || 0); });
+      return next;
+    });
   }, [currentUserProfile]);
   const [mutedRooms, setMutedRooms] = useState(() => {
     try {
@@ -196,8 +216,6 @@ export const ChatProvider = ({ children }) => {
   // Refs
   const messagesEndRef = useRef(null);
   const notificationAudio = useRef(new Audio('/audio/notificacao.mp3'));
-  const isFirstLoadMessages = useRef(true);
-  const lastMessagesCount = useRef(0);
   const notified10 = useRef(new Set());
   const notified5 = useRef(new Set());
   const notified0 = useRef(new Set());
@@ -216,6 +234,7 @@ export const ChatProvider = ({ children }) => {
 
   const playNotificationSound = (roomId = null) => {
     if (roomId && (mutedRoomsRef.current || []).includes(roomId)) return;
+    if (!getPrefs().notificationSound) return;
     
     notificationAudio.current.currentTime = 0;
     notificationAudio.current.play().catch(e => {
@@ -227,6 +246,10 @@ export const ChatProvider = ({ children }) => {
   // Persistência
   const viewRef = useRef(view);
   const processedCallsRef = useRef(new Set());
+  // Convites que EU enviei e ainda espero resposta (só eles podem me levar para a sala)
+  const outgoingCallIdsRef = useRef(new Set());
+  // Convites que já atendi/recusei: nunca devem tocar nem me puxar para a sala de novo
+  const handledCallsRef = useRef(new Set());
   const incomingCallRef = useRef(incomingCall);
   const isOutgoingCallRef = useRef(isOutgoingCall);
 
@@ -248,13 +271,171 @@ export const ChatProvider = ({ children }) => {
     else localStorage.removeItem('hubify_active_room_id');
   }, [activeRoomId]);
 
-  const handleStartMeeting = async (forcedRoomId = null) => {
+  // ---------- Mensagens: armazenamento local, fila de envio e sincronização ----------
+  const knownIdsRef = useRef(new Set());
+  const outboxKey = user?.id ? `hubify_outbox_${user.id}` : null;
+  // Mensagens ainda não confirmadas pelo servidor (sobrevivem a recarregar a página)
+  const outboxRef = useRef(new Map());
+  const sendingRef = useRef(new Set());
+
+  const persistOutbox = () => {
+    if (!outboxKey) return;
+    const pending = [...outboxRef.current.values()];
+    try {
+      localStorage.setItem(outboxKey, JSON.stringify(pending));
+    } catch (e) {
+      // Anexo grande demais para o localStorage: guarda ao menos os textos
+      try { localStorage.setItem(outboxKey, JSON.stringify(pending.filter(m => !m.attachment))); } catch (e2) {}
+    }
+  };
+
+  // Insere/atualiza mensagens sem duplicar e sem deixar uma versão antiga sobrescrever a nova
+  const upsertMessages = (incoming) => {
+    if (!incoming?.length) return;
+    incoming.forEach(m => {
+      knownIdsRef.current.add(m.id);
+      // Versão do servidor confirma o envio
+      if (m.updatedAt && outboxRef.current.delete(m.id)) persistOutbox();
+      roomSortTimestamps.current[m.roomId] = Math.max(roomSortTimestamps.current[m.roomId] || 0, m.timestamp || 0);
+    });
+    setAllMessages(prev => {
+      const byId = new Map(prev.map(m => [m.id, m]));
+      incoming.forEach(m => {
+        const current = byId.get(m.id);
+        if (current?.updatedAt && m.updatedAt && m.updatedAt < current.updatedAt) return;
+        byId.set(m.id, { ...current, ...m, status: m.updatedAt ? undefined : (m.status ?? current?.status) });
+      });
+      return [...byId.values()].sort((a, b) => a.timestamp - b.timestamp);
+    });
+  };
+
+  const deliverMessage = (msg) => {
+    const s = socketRef.current;
+    if (!s?.connected || sendingRef.current.has(msg.id)) return;
+    sendingRef.current.add(msg.id);
+    s.timeout(15000).emit('send-message', msg, (err, res) => {
+      sendingRef.current.delete(msg.id);
+      if (!err && res?.ok) {
+        upsertMessages([res.message]);
+      } else {
+        console.warn(`[MSG] Envio de ${msg.id} falhou (${err ? 'timeout' : res?.error}); será reenviada`);
+        upsertMessages([{ ...msg, status: 'failed' }]);
+      }
+    });
+  };
+
+  const queueMessage = (msg) => {
+    outboxRef.current.set(msg.id, msg);
+    persistOutbox();
+    upsertMessages([msg]);
+    deliverMessage(msg);
+  };
+
+  const flushOutbox = () => {
+    outboxRef.current.forEach(msg => deliverMessage(msg));
+  };
+
+  const retryMessage = (messageId) => {
+    const msg = outboxRef.current.get(messageId);
+    if (!msg) return;
+    upsertMessages([{ ...msg, status: 'sending' }]);
+    deliverMessage(msg);
+  };
+
+  // Busca no servidor o que mudou desde a última sincronização (reconexão, voltar ao app, segurança)
+  const syncCursorRef = useRef(0);
+  const syncingRef = useRef(false);
+  const firstSyncDoneRef = useRef(false);
+  const syncedGroupsRef = useRef(new Set());
+
+  const isHiddenRoom = (roomId) => processingDeletions.current.has(roomId) || deletedRoomIdsRef.current.includes(roomId);
+
+  // Mensagens novas de outras pessoas: "lida" se a conversa está aberta na tela, senão notificação
+  const handleIncoming = (messages) => {
+    const fresh = messages.filter(m => !knownIdsRef.current.has(m.id) && m.senderId !== user.id && !m.isDeleted);
+    upsertMessages(messages);
+    if (!fresh.length || !firstSyncDoneRef.current) return;
+    const activeRoom = activeRoomIdRef.current;
+    const viewing = viewRef.current === 'chat' && !document.hidden;
+    if (viewing && fresh.some(m => m.roomId === activeRoom)) markRoomAsRead(activeRoom);
+    // Histórico antigo (ex.: grupo em que acabei de entrar) não toca notificação
+    const recent = serverNow() - 2 * 60 * 1000;
+    const notify = fresh.filter(m => m.timestamp > recent && !(viewing && m.roomId === activeRoom));
+    if (notify.length) playNotificationSound(notify[notify.length - 1].roomId);
+  };
+
+  const resyncRef = useRef(false);
+  const runSync = async () => {
+    if (!user?.id) return;
+    if (syncingRef.current) { resyncRef.current = true; return; }
+    syncingRef.current = true;
+    try {
+      const groupIds = groupsRef.current.map(g => g.id);
+      const first = !syncCursorRef.current;
+      const known = groupIds.filter(id => syncedGroupsRef.current.has(id));
+      const fresh = groupIds.filter(id => !syncedGroupsRef.current.has(id));
+      const since = first ? 0 : Math.max(0, syncCursorRef.current - SYNC_OVERLAP_MS);
+      const requests = [syncMessages({ since, userId: user.id, groupIds: first ? groupIds : known })];
+      // Grupo que acabou de aparecer: histórico completo só dele
+      if (!first && fresh.length) requests.push(syncMessages({ since: 0, groupIds: fresh }));
+      const results = await Promise.all(requests);
+      groupIds.forEach(id => syncedGroupsRef.current.add(id));
+      results.forEach(r => { syncCursorRef.current = Math.max(syncCursorRef.current, r.cursor); });
+      handleIncoming(results.flatMap(r => r.messages).filter(m => m.roomId && !isHiddenRoom(m.roomId)));
+      firstSyncDoneRef.current = true;
+    } catch (e) {
+      console.warn('[SYNC] Falha ao sincronizar mensagens:', e.message);
+    } finally {
+      syncingRef.current = false;
+      if (resyncRef.current) {
+        resyncRef.current = false;
+        runSyncRef.current();
+      }
+    }
+  };
+
+  // Mantém sempre a versão mais nova das funções para os listeners registrados uma única vez
+  const runSyncRef = useRef(runSync);
+  runSyncRef.current = runSync;
+  const flushOutboxRef = useRef(flushOutbox);
+  flushOutboxRef.current = flushOutbox;
+  const handleIncomingRef = useRef(handleIncoming);
+  handleIncomingRef.current = handleIncoming;
+  const upsertMessagesRef = useRef(upsertMessages);
+  upsertMessagesRef.current = upsertMessages;
+  const markRoomAsReadRef = useRef(markRoomAsRead);
+  markRoomAsReadRef.current = markRoomAsRead;
+
+  // Recupera o que ficou sem enviar (página recarregada, aparelho sem rede)
+  useEffect(() => {
+    const saved = parseJson(outboxKey && localStorage.getItem(outboxKey), []) || [];
+    outboxRef.current = new Map(saved.map(m => [m.id, m]));
+    if (saved.length) upsertMessagesRef.current(saved.map(m => ({ ...m, status: 'sending' })));
+  }, [outboxKey]);
+
+  // ---------- Chamadas: convites via socket (chegam na hora, sem esperar o banco) ----------
+  const emitCallInvite = (invite) => new Promise((resolve) => {
+    const s = socketRef.current;
+    if (!s?.connected) return resolve({ ok: false });
+    s.timeout(8000).emit('call-invite', invite, (err, res) => resolve(err ? { ok: false } : res));
+  });
+
+  const myCallName = () => currentUserProfile?.name || user.username;
+
+  const startCall = (rId, type) => {
     if (view === 'room') {
       alert("Você já está em uma chamada ativa. Encerre-a antes de iniciar outra.");
-      return;
+      return false;
     }
-    const rId = forcedRoomId || activeRoomId;
-    if (!rId) return;
+    if (!socketRef.current?.connected) {
+      setSuccessMessage('Sem conexão com o servidor. Aguarde reconectar e tente novamente.');
+      setShowSuccessModal(true);
+      return false;
+    }
+    // Adianta as credenciais TURN enquanto toca
+    loadIceServers();
+    setCallType(type);
+    setMediaSettings({ video: type === 'video', audio: true });
 
     if (rId.startsWith('dm_')) {
       const otherId = rId.replace('dm_', '').split('_').find(id => id !== user.id);
@@ -262,11 +443,9 @@ export const ChatProvider = ({ children }) => {
 
       if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
         alert(`${contact.name} está em outra reunião ou ocupado no momento.`);
-        return;
+        return false;
       }
 
-      setCallType('video');
-      setMediaSettings({ video: true, audio: true });
       setIsOutgoingCall(true);
       setOutgoingTarget({
         id: otherId,
@@ -274,33 +453,56 @@ export const ChatProvider = ({ children }) => {
         avatarUrl: contact?.avatarUrl || "/image/sem_foto.avif"
       });
 
-      const callId = `call_${Date.now()}`;
-      
-      // Enviar convite de forma assíncrona para não travar a UI de discagem
-      createDocument(`artifacts/${appId}/public/data/calls`, {
-        id: callId,
-        from: user.id,
-        fromName: currentUserProfile?.name || user.username,
-        fromAvatar: currentUserProfile?.avatarUrl,
-        to: otherId,
-        type: 'video',
-        status: 'ringing',
-        roomId: rId,
-        timestamp: Date.now()
-      }).catch(err => {
-        console.error("Erro ao criar convite de chamada:", err);
+      const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      outgoingCallIdsRef.current = new Set([callId]);
+
+      emitCallInvite({
+        callId, to: otherId, roomId: rId, type,
+        fromName: myCallName(),
+        fromAvatar: currentUserProfile?.avatarUrl
+      }).then(res => {
+        if (res?.ok || !outgoingCallIdsRef.current.has(callId)) return;
+        outgoingCallIdsRef.current.clear();
         setIsOutgoingCall(false);
-        alert("Falha ao iniciar a chamada. Tente novamente.");
+        setSuccessMessage('Falha ao iniciar a chamada. Verifique sua conexão e tente novamente.');
+        setShowSuccessModal(true);
       });
-    } else {
-      // É uma reunião agendada (começa com meeting_id)
+      return true;
+    }
+
+    // Grupo: quem liga entra direto na sala e os membros recebem o convite
+    const group = groups.find(g => g.id === rId);
+    if (group) {
+      group.members.forEach((memberId) => {
+        if (memberId === user.id) return;
+        const member = users.find(u => u.id === memberId);
+        if (member?.status === 'reuniao' || member?.status === 'ocupado') return;
+        emitCallInvite({
+          callId: `call_${Date.now()}_${memberId}`,
+          to: memberId, roomId: rId, type,
+          fromName: `${myCallName()} (Grupo: ${group.name})`,
+          fromAvatar: currentUserProfile?.avatarUrl
+        });
+      });
+    }
+    setActiveRoomId(rId);
+    setView('room');
+    setUserStatus('reuniao');
+    setIsOutgoingCall(false);
+    return true;
+  };
+
+  const handleStartMeeting = async (forcedRoomId = null) => {
+    const rId = forcedRoomId || activeRoomId;
+    if (!rId) return;
+
+    if (rId.startsWith('meeting_')) {
+      // Reunião agendada
       const mtgId = rId.replace('meeting_', '');
       const meeting = meetings.find(m => m.id === mtgId);
 
       if (meeting) {
-        const isHost = meeting.creatorId === user.id;
-
-        if (isHost) {
+        if (meeting.creatorId === user.id) {
           // Anfitrião entra e inicia a reunião
           await saveDocument(`artifacts/${appId}/public/data/meetings/${mtgId}`, { status: 'ongoing' }, { merge: true });
         } else if (meeting.status !== 'ongoing') {
@@ -310,162 +512,39 @@ export const ChatProvider = ({ children }) => {
           return;
         }
       }
-
-      // Para grupos ou reuniões, convidar/entrar
-      const group = groups.find(g => g.id === rId);
-      if (group) {
-        setIsOutgoingCall(true);
-        setOutgoingTarget({
-          id: group.id,
-          name: group.name,
-          isGroup: true
-        });
-
-        group.members.forEach(async (memberId) => {
-          if (memberId !== user.id) {
-            const member = users.find(u => u.id === memberId);
-            if (member?.status === 'reuniao' || member?.status === 'ocupado') return;
-
-            const callId = `call_${Date.now()}_${memberId}`;
-            await createDocument(`artifacts/${appId}/public/data/calls`, {
-              id: callId,
-              from: user.id,
-              fromName: `${currentUserProfile?.name || user.username} (Grupo: ${group.name})`,
-              fromAvatar: currentUserProfile?.avatarUrl,
-              to: memberId,
-              type: 'video',
-              status: 'ringing',
-              roomId: rId,
-              timestamp: Date.now()
-            });
-          }
-        });
-      }
-      setCallType('video');
-      setMediaSettings({ video: true, audio: true });
-      setActiveRoomId(rId);
-      setView('room');
-      setUserStatus('reuniao');
-      // For groups, we don't show the dialer to the initiator
-      setIsOutgoingCall(false); 
     }
+    startCall(rId, 'video');
   };
 
   const handleStartAudioCall = async (forcedRoomId = null) => {
-    if (view === 'room') {
-      alert("Você já está em uma chamada ativa. Encerre-a antes de iniciar outra.");
-      return;
-    }
     const rId = forcedRoomId || activeRoomId;
     if (!rId) return;
-
-    if (rId.startsWith('dm_')) {
-      const otherId = rId.replace('dm_', '').split('_').find(id => id !== user.id);
-      const contact = users.find(u => u.id === otherId);
-
-      if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
-        alert(`${contact.name} está em outra reunião ou ocupado no momento.`);
-        return;
-      }
-
-      setCallType('audio');
-      setMediaSettings({ video: false, audio: true });
-      setIsOutgoingCall(true);
-      setOutgoingTarget({
-        id: otherId,
-        name: contact?.name || 'Colega',
-        avatarUrl: contact?.avatarUrl || "/image/sem_foto.avif"
-      });
-
-      const callId = `call_${Date.now()}`;
-      
-      // Enviar convite de forma assíncrona
-      createDocument(`artifacts/${appId}/public/data/calls`, {
-        id: callId,
-        from: user.id,
-        fromName: currentUserProfile?.name || user.username,
-        fromAvatar: currentUserProfile?.avatarUrl,
-        to: otherId,
-        type: 'audio',
-        status: 'ringing',
-        roomId: rId,
-        timestamp: Date.now()
-      }).catch(err => {
-        console.error("Erro ao criar convite de áudio:", err);
-        setIsOutgoingCall(false);
-      });
-    } else {
-      // Para grupos, convidar todos os membros
-      const group = groups.find(g => g.id === rId);
-      if (group) {
-        setIsOutgoingCall(true);
-        setOutgoingTarget({
-          id: group.id,
-          name: group.name,
-          isGroup: true
-        });
-
-        group.members.forEach(async (memberId) => {
-          if (memberId !== user.id) {
-            const member = users.find(u => u.id === memberId);
-            if (member?.status === 'reuniao' || member?.status === 'ocupado') return;
-
-            const callId = `call_${Date.now()}_${memberId}`;
-            await createDocument(`artifacts/${appId}/public/data/calls`, {
-              id: callId,
-              from: user.id,
-              fromName: `${currentUserProfile?.name || user.username} (Grupo: ${group.name})`,
-              fromAvatar: currentUserProfile?.avatarUrl,
-              to: memberId,
-              type: 'audio',
-              status: 'ringing',
-              roomId: rId,
-              timestamp: Date.now()
-            });
-          }
-        });
-      }
-      setCallType('audio');
-      setMediaSettings({ video: false, audio: true });
-      setActiveRoomId(rId);
-      setView('room');
-      setUserStatus('reuniao');
-      setIsOutgoingCall(false);
-    }
+    startCall(rId, 'audio');
   };
 
   const handleInviteToCall = async (targetId, roomId, type) => {
-    if (view !== 'room') {
-      // Se não estivermos em uma sala, não faz sentido convidar para uma (a menos que seja o fluxo de início)
-      // Mas aqui especificamente bloqueamos se estivermos tentando convidar de fora? 
-      // Na verdade, o usuário quer que se estivermos em uma chamada, não possamos convidar (para outra?).
-    }
-    
     const contact = users.find(u => u.id === targetId);
     if (contact?.status === 'reuniao' || contact?.status === 'ocupado') {
       alert(`${contact.name} já está em uma reunião ou ocupado.`);
       return;
     }
 
-    const callId = `call_invite_${Date.now()}_${targetId}`;
-    await createDocument(`artifacts/${appId}/public/data/calls`, {
-      id: callId,
-      from: user.id,
-      fromName: `${currentUserProfile?.name || user.username} (Convidando...)`,
-      fromAvatar: currentUserProfile?.avatarUrl,
-      to: targetId,
-      type: type || 'video',
-      status: 'ringing',
-      roomId: roomId,
-      timestamp: Date.now()
+    const res = await emitCallInvite({
+      callId: `call_invite_${Date.now()}_${targetId}`,
+      to: targetId, roomId, type: type || 'video',
+      fromName: `${myCallName()} (Convidando...)`,
+      fromAvatar: currentUserProfile?.avatarUrl
     });
+    if (!res?.ok) throw new Error('Convite não enviado');
   };
+
+  const newMessageId = (prefix = 'msg') => `${prefix}_${Date.now()}_${user.id}_${Math.random().toString(36).substr(2, 5)}`;
 
   const handleSendMessage = async (text, attachment = null, replyToId = null) => {
     if (!activeRoomId || !user) return;
 
     if (activeRoomId.startsWith('dm_')) {
-      const otherId = activeRoomId.replace('dm_', '').replace(user.id, '').replace('_', '');
+      const otherId = activeRoomId.replace('dm_', '').split('_').find(id => id !== user.id);
       if (otherId && !activeDMs.includes(otherId)) {
         const newDMs = [...activeDMs, otherId];
         setActiveDMs(newDMs);
@@ -473,34 +552,18 @@ export const ChatProvider = ({ children }) => {
       }
     }
 
-    const msgId = `msg_${Date.now()}_${user.id}_${Math.random().toString(36).substr(2, 5)}`;
-    const now = Date.now();
-    const newMsg = {
-      id: msgId,
+    // Aparece na hora com o relógio (enviando); o servidor confirma com ✓
+    queueMessage({
+      id: newMessageId(),
       roomId: activeRoomId,
       senderId: user.id,
       senderName: currentUserProfile?.name || user.username,
       text,
       attachment,
       replyToId,
-      timestamp: now,
-      isOptimistic: true
-    };
-
-    // Atualização otimista: adiciona à lista local imediatamente
-    setAllMessages(prev => [...prev, newMsg]);
-
-    try {
-      await createDocument(`artifacts/${appId}/public/data/messages`, newMsg);
-      if (socketRef.current) {
-        socketRef.current.emit('message-created', newMsg);
-      }
-      // O listener do Firebase/API cuidará de remover a flag isOptimistic ao receber a mensagem oficial
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      // Remover a mensagem otimista em caso de falha crítica
-      setAllMessages(prev => prev.filter(m => m.id !== msgId));
-    }
+      timestamp: serverNow(),
+      status: 'sending'
+    });
   };
 
   const handleForwardMessages = async (messageIds, targetRoomIds) => {
@@ -509,16 +572,16 @@ export const ChatProvider = ({ children }) => {
         const originalMsg = allMessages.find(m => m.id === msgId);
         if (!originalMsg) continue;
 
-        const newId = `msg_fwd_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        await createDocument(`artifacts/${appId}/public/data/messages`, {
-          id: newId,
-          roomId: roomId,
+        queueMessage({
+          id: newMessageId('msg_fwd'),
+          roomId,
           senderId: user.id,
           senderName: currentUserProfile?.name || user.username,
           text: originalMsg.text,
           attachment: originalMsg.attachment,
-          timestamp: Date.now(),
-          isForwarded: true
+          timestamp: serverNow(),
+          isForwarded: true,
+          status: 'sending'
         });
       }
     }
@@ -593,48 +656,60 @@ export const ChatProvider = ({ children }) => {
     const newSocket = io(SOCKET_URL, SOCKET_OPTIONS);
     socketRef.current = newSocket;
     setSocket(newSocket);
+    const typingTimers = {};
 
     newSocket.on('connect', () => {
       console.log(`[SOCKET_CONNECT] Connected with ID: ${newSocket.id}`);
-      // If there's an active room, join it immediately
-      if (activeRoomIdRef.current && view !== 'room') {
-        const profileAvatar = currentUserProfile?.avatarUrl || currentUserProfile?.avatar;
-        newSocket.emit('join-room', { 
-          roomId: activeRoomIdRef.current, 
-          uid: user.id, 
-          name: currentUserProfile?.name || user.username,
-          avatarUrl: profileAvatar
-        });
+      newSocket.emit('presence', { uid: user.id });
+      newSocket.emit('subscribe-rooms', { rooms: groupsRef.current.map(g => g.id) });
+      const t0 = Date.now();
+      newSocket.timeout(5000).emit('server-time', (err, serverTime) => {
+        if (!err && typeof serverTime === 'number') clockOffsetRef.current = serverTime - (t0 + Date.now()) / 2;
+      });
+      // Recupera o que chegou enquanto estava desconectado e reenvia o que ficou pendente
+      runSyncRef.current();
+      flushOutboxRef.current();
+      if (activeRoomIdRef.current && viewRef.current === 'chat' && !document.hidden) {
+        markRoomAsReadRef.current(activeRoomIdRef.current);
       }
     });
 
-    newSocket.on('user-typing', ({ userId, userName }) => {
-      const roomId = activeRoomIdRef.current;
-      if (!roomId) return;
+    newSocket.on('disconnect', (reason) => {
+      console.warn(`[SOCKET] Desconectado: ${reason}`);
+      // Desconexão pedida pelo servidor não reconecta sozinha
+      if (reason === 'io server disconnect') newSocket.connect();
+    });
+
+    const clearTyping = (roomId, userId) => {
+      clearTimeout(typingTimers[`${roomId}:${userId}`]);
+      setTypingUsers(prev => {
+        if (!prev[roomId]?.[userId]) return prev;
+        const roomTyping = { ...prev[roomId] };
+        delete roomTyping[userId];
+        return { ...prev, [roomId]: roomTyping };
+      });
+    };
+
+    newSocket.on('user-typing', ({ roomId, userId, userName }) => {
+      if (!roomId || !userId) return;
       setTypingUsers(prev => ({
         ...prev,
         [roomId]: { ...(prev[roomId] || {}), [userId]: userName }
       }));
+      // Se o "parou de digitar" se perder, o aviso some sozinho
+      clearTimeout(typingTimers[`${roomId}:${userId}`]);
+      typingTimers[`${roomId}:${userId}`] = setTimeout(() => clearTyping(roomId, userId), TYPING_TTL_MS);
     });
 
-    newSocket.on('user-stop-typing', ({ userId }) => {
-      const roomId = activeRoomIdRef.current;
-      if (!roomId) return;
-      setTypingUsers(prev => {
-        const roomTyping = { ...(prev[roomId] || {}) };
-        delete roomTyping[userId];
-        return { ...prev, [roomId]: roomTyping };
-      });
+    newSocket.on('user-stop-typing', ({ roomId, userId }) => {
+      if (roomId && userId) clearTyping(roomId, userId);
     });
 
     newSocket.on('user-read-messages', ({ userId, roomId, timestamp }) => {
-      console.log(`[SOCKET_READ] Received user-read-messages from user ${userId} for room ${roomId} at ${new Date(timestamp).toISOString()}`);
-      // 🔥 Atualizar o estado separado de readTimestamps que NÃO é sobrescrito pelo polling
       setOtherUsersReadTimestamps(prev => {
         const userTs = prev[userId] || {};
-        const nextUserTs = { ...userTs, [roomId]: timestamp };
-        console.log(`[SOCKET_READ] Updated otherUsersReadTimestamps for ${userId}:`, nextUserTs);
-        return { ...prev, [userId]: nextUserTs };
+        if ((userTs[roomId] || 0) >= timestamp) return prev;
+        return { ...prev, [userId]: { ...userTs, [roomId]: timestamp } };
       });
     });
 
@@ -644,27 +719,20 @@ export const ChatProvider = ({ children }) => {
 
     newSocket.on('message-created', (message) => {
       if (!message?.id || !message?.roomId) return;
-      console.log(`[SOCKET_MSG] New message received in room ${message.roomId} from ${message.senderId}`);
-      const isDm = message.roomId.startsWith('dm_');
-      const group = isDm ? null : groupsRef.current.find(g => g.id === message.roomId);
-      const canSeeRoom = isDm ? message.roomId.includes(user.id) : !!group;
-      if (!canSeeRoom || processingDeletions.current.has(message.roomId) || deletedRoomIdsRef.current.includes(message.roomId)) return;
-
-      setAllMessages(prev => prev.some(m => m.id === message.id) ? prev : [...prev, { ...message, isOptimistic: false }]);
-      roomSortTimestamps.current[message.roomId] = Math.max(roomSortTimestamps.current[message.roomId] || 0, message.timestamp || Date.now());
-
-      if (activeRoomIdRef.current === message.roomId && message.senderId !== user.id) {
-        console.log(`[SOCKET_MSG] Active room matched - marking as read for room ${message.roomId}`);
-        markRoomAsRead(message.roomId).catch(err => console.error(`[SOCKET_MSG] Error marking read:`, err));
+      // Alguém escreveu numa DM que eu tinha apagado: a conversa volta (como no WhatsApp)
+      if (message.roomId.startsWith('dm_') && deletedRoomIdsRef.current.includes(message.roomId)) {
+        processingDeletions.current.delete(message.roomId);
+        deletedRoomIdsRef.current = deletedRoomIdsRef.current.filter(id => id !== message.roomId);
+        setDeletedRoomIds(prev => prev.filter(id => id !== message.roomId));
       }
+      if (processingDeletions.current.has(message.roomId) || deletedRoomIdsRef.current.includes(message.roomId)) return;
+      handleIncomingRef.current([message]);
     });
 
-    newSocket.on('message-deleted', ({ messageId, roomId }) => {
-      if (!messageId) return;
-      setAllMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDeleted: true, text: '🚫 Mensagem apagada', attachment: null } : m));
-      if (roomId) {
-        roomSortTimestamps.current[roomId] = roomSortTimestamps.current[roomId] || Date.now();
-      }
+    // Edição ou exclusão feita pelo outro lado
+    newSocket.on('message-updated', (message) => {
+      if (!message?.id || !knownIdsRef.current.has(message.id)) return;
+      upsertMessagesRef.current([message]);
     });
 
     newSocket.on('conversation-deleted', ({ roomId }) => {
@@ -679,21 +747,95 @@ export const ChatProvider = ({ children }) => {
       }
     });
 
+    // ---------- Chamadas ----------
+    newSocket.on('call-incoming', (call) => {
+      if (!call?.id || handledCallsRef.current.has(call.id)) return;
+      if (incomingCallRef.current?.id === call.id) return;
+      // Já em outra chamada (ou tocando/ligando): responde "ocupado" na hora
+      if (viewRef.current === 'room' || incomingCallRef.current || isOutgoingCallRef.current) {
+        handledCallsRef.current.add(call.id);
+        newSocket.emit('call-decline', { callId: call.id, reason: 'busy' });
+        return;
+      }
+      console.log(`[Chamada] Convite recebido: ${call.id} para sala ${call.roomId}`);
+      loadIceServers();
+      incomingCallRef.current = call;
+      setIncomingCall(call);
+      if (call.type) setCallType(call.type);
+    });
+
+    newSocket.on('call-accepted', ({ callId, roomId }) => {
+      if (!outgoingCallIdsRef.current.has(callId) || viewRef.current === 'room') return;
+      console.log(`[Chamada] Aceita. Entrando na sala: ${roomId}`);
+      outgoingCallIdsRef.current.clear();
+      setActiveRoomId(roomId);
+      setIncomingCall(null);
+      setIsOutgoingCall(false);
+      setShowMediaSetup(false);
+      setView('room');
+      setUserStatus('reuniao');
+    });
+
+    const endOutgoing = (callId, message) => {
+      if (!outgoingCallIdsRef.current.delete(callId)) return;
+      if (outgoingCallIdsRef.current.size > 0) return;
+      setIsOutgoingCall(false);
+      if (viewRef.current !== 'room') {
+        setSuccessMessage(message);
+        setShowSuccessModal(true);
+      }
+    };
+
+    newSocket.on('call-declined', ({ callId, reason }) => {
+      endOutgoing(callId, reason === 'busy' ? 'Ocupado em outra chamada.' : 'Chamada recusada.');
+    });
+
+    newSocket.on('call-missed', ({ callId }) => endOutgoing(callId, 'Sem resposta.'));
+
+    newSocket.on('call-cancelled', ({ callId }) => {
+      handledCallsRef.current.add(callId);
+      if (incomingCallRef.current?.id !== callId) return;
+      incomingCallRef.current = null;
+      setIncomingCall(null);
+      setShowMediaSetup(false);
+    });
+
+    // Celular volta do bloqueio / aba volta ao foco / rede volta: reconecta e sincroniza na hora
+    const onResume = () => {
+      if (document.hidden) return;
+      if (!newSocket.connected) newSocket.connect();
+      runSyncRef.current();
+      if (activeRoomIdRef.current && viewRef.current === 'chat') markRoomAsReadRef.current(activeRoomIdRef.current);
+    };
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('online', onResume);
+    window.addEventListener('focus', onResume);
+
+    const safety = setInterval(() => {
+      if (document.hidden) return;
+      runSyncRef.current();
+      flushOutboxRef.current();
+    }, SAFETY_SYNC_MS);
+
     return () => {
+      clearInterval(safety);
+      Object.values(typingTimers).forEach(clearTimeout);
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('online', onResume);
+      window.removeEventListener('focus', onResume);
       newSocket.disconnect();
+      socketRef.current = null;
     };
   }, [user]);
 
-  // Sync socket with active room
+  // Grupos mudaram: assina os eventos deles e baixa o histórico dos que acabaram de aparecer
+  const groupIdsKey = groups.map(g => g.id).sort().join(',');
   useEffect(() => {
-    if (socketRef.current && activeRoomId && user && view !== 'room') {
-      socketRef.current.emit('join-room', { 
-        roomId: activeRoomId, 
-        uid: user.id, 
-        name: currentUserProfile?.name || user.username 
-      });
-    }
-  }, [activeRoomId]);
+    if (!user) return;
+    const ids = groupIdsKey ? groupIdsKey.split(',') : [];
+    socketRef.current?.emit('subscribe-rooms', { rooms: ids });
+    if (ids.some(id => !syncedGroupsRef.current.has(id))) runSyncRef.current();
+  }, [groupIdsKey, user]);
 
   // Listeners
     useEffect(() => {
@@ -703,168 +845,58 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
+    // Primeira carga das mensagens (as próximas chegam pelo socket)
+    runSyncRef.current();
+
     const unsubUsers = listenToCollection(`artifacts/${appId}/public/data/users`, (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    const unsubMe = listenToCollection(`artifacts/${appId}/public/data/users/${user.id}`, (snap) => {
-      const myDoc = snap.docs.find(d => d.id === user.id);
-      if (myDoc) {
-        const data = myDoc.data();
-        if (data.activeDMs) {
-          const parseResilient = (val) => {
-            if (!val) return [];
-            if (Array.isArray(val)) return val;
-            if (typeof val !== 'string') return [];
-            try {
-              return JSON.parse(val);
-            } catch (e) {
-              if (val.startsWith('[') && val.endsWith(']')) {
-                return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-              }
-              return [];
-            }
-          };
-          setActiveDMs(parseResilient(data.activeDMs));
+      const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setUsers(all);
+      const me = all.find(u => u.id === user.id);
+      if (me?.activeDMs) {
+        const stored = parseJson(me.activeDMs, []);
+        const known = new Set(all.map(u => u.id));
+        const cleaned = extractUserIds(JSON.stringify(stored)).filter(id => id !== user.id && known.has(id));
+        setActiveDMs(cleaned);
+        // Corrige no banco a lista corrompida para não reaparecer em outros aparelhos
+        if (JSON.stringify(cleaned) !== JSON.stringify(stored)) {
+          saveDocument(`artifacts/${appId}/public/data/users/${user.id}`, { activeDMs: JSON.stringify(cleaned) }, { merge: true }).catch(() => {});
         }
       }
-    });
-
-    const unsubMessages = listenToCollection(`artifacts/${appId}/public/data/messages`, (snap) => {
-      let fetchedMsgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      // FILTRAR MENSAGENS: Apenas se for DM do usuário ou se o usuário estiver no grupo
-      fetchedMsgs = fetchedMsgs.filter(m => {
-        if (!m.roomId || processingDeletions.current.has(m.roomId) || deletedRoomIdsRef.current.includes(m.roomId)) return false;
-        if (m.roomId.startsWith('dm_')) {
-          return m.roomId.includes(user.id);
-        }
-        // Para grupos, precisamos verificar se o usuário é membro ou pendente
-        // Usamos o ref para ter sempre o estado mais atual sem precisar reiniciar o listener
-        const group = groupsRef.current.find(g => g.id === m.roomId);
-        return !!group; // Se o grupo está no estado 'groups', o usuário tem acesso a ele
-      });
-
-      fetchedMsgs.sort((a, b) => a.timestamp - b.timestamp);
-
-      // Som de notificação para novas mensagens de terceiros
-      if (!isFirstLoadMessages.current && fetchedMsgs.length > lastMessagesCount.current) {
-        const lastMsg = fetchedMsgs[fetchedMsgs.length - 1];
-        if (lastMsg && lastMsg.senderId !== user?.id && lastMsg.roomId !== activeRoomIdRef.current) {
-          playNotificationSound(lastMsg.roomId);
-        }
-      }
-
-      setAllMessages(prev => {
-        // Preservar mensagens otimistas que ainda não voltaram do servidor
-        const optimistic = prev.filter(m => m.isOptimistic && !fetchedMsgs.find(f => f.id === m.id));
-        const merged = [...fetchedMsgs, ...optimistic];
-        merged.sort((a, b) => a.timestamp - b.timestamp);
-        
-        // Atualizar timestamps de ordenação apenas se houver novas mensagens reais (não deleção)
-        merged.forEach(m => {
-          if (!roomSortTimestamps.current[m.roomId] || m.timestamp > roomSortTimestamps.current[m.roomId]) {
-            roomSortTimestamps.current[m.roomId] = m.timestamp;
-          }
-        });
-        
-        return merged;
-      });
-
-      // NOVO: Se houver sala ativa, atualizar readTimestamps para o momento atual
-      // Isso garante que se novas mensagens chegarem na sala aberta, elas sejam marcadas como lidas
-      if (activeRoomIdRef.current && user?.id) {
-        markRoomAsRead(activeRoomIdRef.current).catch(() => {});
-      }
-
-      lastMessagesCount.current = fetchedMsgs.length;
-      isFirstLoadMessages.current = false;
-    });
+    }, 4000);
 
     const unsubMeetings = listenToCollection(`artifacts/${appId}/public/data/meetings`, (snap) => {
       let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setMeetings(fetched.filter(m => m.creatorId === user.id || m.participants?.includes(user.id)));
-    });
+    }, 5000);
 
     const unsubGroups = listenToCollection(`artifacts/${appId}/public/data/groups`, (snap) => {
       let fetched = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setGroups(fetched.filter(g => 
-        (g.members?.includes(user.id) || g.pendingMembers?.includes(user.id)) && 
+      setGroups(fetched.filter(g =>
+        (g.members?.includes(user.id) || g.pendingMembers?.includes(user.id)) &&
         !processingDeletions.current.has(g.id) &&
         !deletedRoomIdsRef.current.includes(g.id)
       ));
-    });
-
-    const unsubCalls = listenToCollection(`artifacts/${appId}/public/data/calls`, (snap) => {
-      const allCallsRaw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const now = Date.now();
-      
-      // Filtrar apenas chamadas RECENTES (últimos 5 minutos) para evitar lixo de sessões anteriores
-      const allCalls = allCallsRaw.filter(c => c.timestamp && (now - c.timestamp < 300000));
-      
-      setIncomingCall(prev => {
-        if (prev && !allCalls.find(c => c.id === prev.id)) return null;
-        return prev;
-      });
-
-      allCalls.forEach((callData) => {
-        const isFromMe = callData.from === user.id;
-        const isToMe = callData.to === user.id;
-
-        // Recebendo chamada
-        if (isToMe && callData.status === 'ringing') {
-          if (!incomingCallRef.current || incomingCallRef.current.id !== callData.id) {
-            console.log(`[Chamada] Convite recebido: ${callData.id} para sala ${callData.roomId}`);
-            setIncomingCall(callData);
-            if (callData.type) setCallType(callData.type);
-          }
-        }
-
-        // Chamada aceita (ambos entram)
-        if (callData.status === 'accepted' && callData.roomId && (isFromMe || isToMe)) {
-          if (viewRef.current !== 'room') {
-            console.log(`[Chamada] Conexão estabelecida na sala: ${callData.roomId}`);
-            setActiveRoomId(callData.roomId);
-            setIncomingCall(null);
-            setIsOutgoingCall(false);
-            setShowMediaSetup(false);
-            setView('room');
-          }
-          
-          if (isFromMe && !processedCallsRef.current.has(callData.id)) {
-            processedCallsRef.current.add(callData.id);
-            setTimeout(() => removeDocument(`artifacts/${appId}/public/data/calls/${callData.id}`).catch(() => { }), 2000);
-          }
-        }
-
-        // Chamada recusada ou cancelada
-        if ((callData.status === 'declined' || callData.status === 'cancelled') && (isFromMe || isToMe)) {
-          if (isOutgoingCallRef.current || incomingCallRef.current || viewRef.current === 'room') {
-            setIncomingCall(null);
-            setIsOutgoingCall(false);
-            setShowMediaSetup(false);
-            if (isFromMe && callData.status === 'declined') {
-              setSuccessMessage("Chamada recusada.");
-              setShowSuccessModal(true);
-            }
-          }
-          if (isFromMe && !processedCallsRef.current.has(callData.id)) {
-            processedCallsRef.current.add(callData.id);
-            setTimeout(() => removeDocument(`artifacts/${appId}/public/data/calls/${callData.id}`).catch(() => { }), 2000);
-          }
-        }
-      });
-    });
+    }, 5000);
 
     const unsubInvites = listenToCollection(`artifacts/${appId}/public/data/invites`, (snap) => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setGroupInvites(all);
-    });
+    }, 5000);
 
     return () => {
-      unsubUsers(); unsubMe(); unsubMessages(); unsubMeetings(); unsubGroups(); unsubCalls(); unsubInvites();
+      unsubUsers(); unsubMeetings(); unsubGroups(); unsubInvites();
     };
   }, [user]);
+
+  // Conversa salva como aberta, mas o contato não existe (dado antigo corrompido): volta para a lista
+  useEffect(() => {
+    if (!users.length || !activeRoomId?.startsWith('dm_') || view === 'room') return;
+    const otherId = activeRoomId.replace('dm_', '').split('_').find(id => id !== user?.id);
+    if (!users.some(u => u.id === otherId)) {
+      setActiveRoomId(null);
+      setSelectedChatMobile(null);
+    }
+  }, [users, activeRoomId]);
 
   // Ações
   const startConversation = async (contactId) => {
@@ -881,15 +913,21 @@ export const ChatProvider = ({ children }) => {
   const handleCallComplete = (settings) => {
     setMediaSettings(settings);
     setShowMediaSetup(false);
-    if (incomingCall) {
-      console.log(`[Chamada] Aceitando chamada ${incomingCall.id}. Sala: ${incomingCall.roomId}`);
-      const rId = incomingCall.roomId;
-      setActiveRoomId(rId);
-      localStorage.setItem('hubify_active_room_id', rId);
-
-      patchDocument(`artifacts/${appId}/public/data/calls/${incomingCall.id}`, {
-        status: 'accepted',
-        roomId: rId
+    const call = incomingCallRef.current || incomingCall;
+    if (call) {
+      console.log(`[Chamada] Aceitando chamada ${call.id}. Sala: ${call.roomId}`);
+      handledCallsRef.current.add(call.id);
+      incomingCallRef.current = null;
+      setIncomingCall(null);
+      setActiveRoomId(call.roomId);
+      localStorage.setItem('hubify_active_room_id', call.roomId);
+      // Entra na sala imediatamente; quem ligou é avisado na mesma hora pelo servidor
+      socketRef.current?.timeout(8000).emit('call-accept', { callId: call.id }, (err, res) => {
+        if (err || res?.ok || viewRef.current !== 'room') return;
+        // Quem ligou desistiu antes do atendimento
+        handleLeaveRoomRef.current();
+        setSuccessMessage('A chamada já foi encerrada.');
+        setShowSuccessModal(true);
       });
     }
     setView('room');
@@ -897,30 +935,38 @@ export const ChatProvider = ({ children }) => {
   };
 
   const handleCallCancel = async () => {
-    if (isOutgoingCall) {
-      // Encontrar todos os convites de chamada que enviamos que ainda estão tocando
-      const { docs } = await fetchCollection(`artifacts/${appId}/public/data/calls`);
-      const myCalls = docs.filter(d => d.data().from === user.id && d.data().status === 'ringing');
-      for (const callDoc of myCalls) {
-        await removeDocument(`artifacts/${appId}/public/data/calls/${callDoc.id}`);
-      }
+    const s = socketRef.current;
+    outgoingCallIdsRef.current.forEach(callId => s?.emit('call-cancel', { callId }));
+    const call = incomingCallRef.current;
+    if (call) {
+      handledCallsRef.current.add(call.id);
+      s?.emit('call-decline', { callId: call.id });
     }
+    incomingCallRef.current = null;
+    outgoingCallIdsRef.current.clear();
     setIsOutgoingCall(false);
     setIncomingCall(null);
     setShowMediaSetup(false);
   };
 
+  // Rede de segurança: o servidor encerra em 50s; se a conexão caiu, não deixa a tela "chamando" presa
+  useEffect(() => {
+    if (!isOutgoingCall) return;
+    const timer = setTimeout(() => {
+      if (!isOutgoingCallRef.current || viewRef.current === 'room') return;
+      handleCallCancel();
+      setSuccessMessage('Sem resposta.');
+      setShowSuccessModal(true);
+    }, 55000);
+    return () => clearTimeout(timer);
+  }, [isOutgoingCall]);
+
   const handleCallDecline = async (call) => {
-    await patchDocument(`artifacts/${appId}/public/data/calls/${call.id}`, { status: 'declined' });
-    setTimeout(() => {
-      removeDocument(`artifacts/${appId}/public/data/calls/${call.id}`);
-    }, 1000);
+    handledCallsRef.current.add(call.id);
+    incomingCallRef.current = null;
     setIncomingCall(null);
+    socketRef.current?.emit('call-decline', { callId: call.id });
   };
-
-
-
-
 
   const [processingInvites, setProcessingInvites] = useState(new Set());
 
@@ -1057,6 +1103,7 @@ export const ChatProvider = ({ children }) => {
       setSelectedChatMobile(false);
     }
     
+    outgoingCallIdsRef.current.clear();
     setIsOutgoingCall(false);
     setOutgoingTarget(null);
     setIncomingCall(null);
@@ -1067,68 +1114,66 @@ export const ChatProvider = ({ children }) => {
     setSelectedChatMobile(false);
   };
 
+  const handleLeaveRoomRef = useRef(handleLeaveRoom);
+  handleLeaveRoomRef.current = handleLeaveRoom;
+
   const toggleMuteRoom = (roomId) => {
     setMutedRooms(prev => 
       prev.includes(roomId) ? prev.filter(id => id !== roomId) : [...prev, roomId]
     );
   };
 
-  const handleEditMessage = async (messageId, newText) => {
-    const now = Date.now();
-    
-    // Atualização otimista local
-    setAllMessages(prev => prev.map(m => 
-      m.id === messageId ? { ...m, text: newText, isEdited: true, editedAt: now } : m
-    ));
+  // Edição/exclusão: pelo socket (o outro lado vê na hora); sem conexão, direto na API
+  const updateMessage = (messageId, changes) => new Promise((resolve) => {
+    const message = allMessages.find(m => m.id === messageId);
+    if (!message) return resolve(false);
 
-    try {
-      await patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, { 
-        text: newText,
-        isEdited: true,
-        editedAt: now
-      });
-    } catch (error) {
-      console.error("Erro ao editar mensagem:", error);
-      // Reverter em caso de erro (opcional, mas aqui vamos apenas logar)
+    upsertMessages([{ ...message, ...changes }]);
+
+    // Ainda não chegou ao servidor: basta alterar o que está na fila
+    if (outboxRef.current.has(messageId)) {
+      outboxRef.current.set(messageId, { ...outboxRef.current.get(messageId), ...changes });
+      persistOutbox();
+      return resolve(true);
     }
+
+    const viaHttp = () => patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, changes)
+      .then(saved => resolve(!!saved));
+    const s = socketRef.current;
+    if (!s?.connected) return viaHttp();
+    s.timeout(10000).emit('update-message', { id: messageId, roomId: message.roomId, changes }, (err, res) => {
+      if (!err && res?.ok) {
+        upsertMessages([res.message]);
+        resolve(true);
+      } else {
+        viaHttp();
+      }
+    });
+  });
+
+  const handleEditMessage = async (messageId, newText) => {
+    const ok = await updateMessage(messageId, { text: newText, isEdited: true, editedAt: serverNow() });
+    if (!ok) console.error("Erro ao editar mensagem:", messageId);
   };
 
   const [deletingMessages, setDeletingMessages] = useState(new Set());
 
   const handleDeleteMessage = async (messageId) => {
     if (deletingMessages.has(messageId)) return;
-    if (window.confirm("Excluir esta mensagem?")) {
-      const previousMessages = allMessages;
-      setDeletingMessages(prev => new Set(prev).add(messageId));
-      setAllMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDeleted: true, text: '🚫 Mensagem apagada', attachment: null } : m));
-      try {
-        await patchDocument(`artifacts/${appId}/public/data/messages/${messageId}`, {
-          isDeleted: true,
-          text: '🚫 Mensagem apagada',
-          attachment: null
-        });
-        if (socketRef.current) {
-          socketRef.current.emit('message-deleted', {
-            messageId,
-            roomId: activeRoomIdRef.current,
-            deletedBy: user?.id,
-            deletedAt: Date.now()
-          });
-        }
-      } catch (error) {
-        console.error("Erro ao deletar mensagem:", error);
-        setAllMessages(previousMessages);
-      } finally {
-        setDeletingMessages(prev => {
-          const next = new Set(prev);
-          next.delete(messageId);
-          return next;
-        });
-      }
+    if (!window.confirm("Excluir esta mensagem?")) return;
+    const previous = allMessages.find(m => m.id === messageId);
+    setDeletingMessages(prev => new Set(prev).add(messageId));
+    try {
+      const ok = await updateMessage(messageId, { isDeleted: true, text: '🚫 Mensagem apagada', attachment: null });
+      if (!ok && previous) upsertMessages([previous]);
+    } finally {
+      setDeletingMessages(prev => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
     }
   };
-
-
 
   const setTyping = (isTyping) => {
     if (!socketRef.current || !activeRoomId || !user) return;
@@ -1325,7 +1370,8 @@ export const ChatProvider = ({ children }) => {
       return !processingDeletions.current.has(roomId) && !deletedRoomIds.includes(roomId);
     });
 
-    const allActiveContactIds = [...new Set([...filteredActiveDMs, ...Array.from(usersWithMessages)])];
+    const allActiveContactIds = [...new Set([...filteredActiveDMs, ...Array.from(usersWithMessages)])]
+      .filter(id => users.length === 0 || users.some(u => u.id === id));
 
     const rooms = [
       ...groups.filter(g => g.members?.includes(user.id) && !processingDeletions.current.has(g.id) && !deletedRoomIds.includes(g.id)).map(g => ({
@@ -1372,11 +1418,27 @@ export const ChatProvider = ({ children }) => {
     }).sort((a, b) => b.lastMessageTimestamp - a.lastMessageTimestamp);
   }, [groups, activeDMs, users, user, allMessages, deletedRoomIds]);
 
+  // "Lida" dos outros: o salvo no perfil (sobrevive a recarregar) + o recebido ao vivo pelo socket
+  const peerReadTimestamps = useMemo(() => {
+    const merged = {};
+    users.forEach(u => {
+      if (u.id === user?.id) return;
+      const saved = parseJson(u.readTimestamps, null);
+      if (saved && typeof saved === 'object') merged[u.id] = { ...saved };
+    });
+    Object.entries(otherUsersReadTimestamps).forEach(([uid, roomsTs]) => {
+      merged[uid] = { ...(merged[uid] || {}) };
+      Object.entries(roomsTs).forEach(([roomId, ts]) => { merged[uid][roomId] = Math.max(merged[uid][roomId] || 0, ts); });
+    });
+    return merged;
+  }, [users, otherUsersReadTimestamps, user?.id]);
+
   const value = {
     socket,
     activeRoomId, setActiveRoomId,
     allMessages, users, groups, meetings, chatRooms, readTimestamps,
-    otherUsersReadTimestamps, // 🔥 Novo: readTimestamps dos outros usuários (via Socket.IO)
+    otherUsersReadTimestamps: peerReadTimestamps,
+    retryMessage,
     view, setView,
     incomingCall, setIncomingCall,
     isOutgoingCall, setIsOutgoingCall,

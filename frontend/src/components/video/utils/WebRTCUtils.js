@@ -1,136 +1,126 @@
-// Wrapper Nativo do WebRTC
+import { getIceServers } from './iceServers';
+
+// Wrapper Nativo do WebRTC com "perfect negotiation":
+// qualquer lado pode renegociar (câmera, tela) sem travar quando os dois fazem isso ao mesmo tempo.
 export class Peer {
-  constructor({ initiator, trickle = true, stream }) {
-    this._pc = new RTCPeerConnection({ 
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com' },
-        // Servidores TURN Gratuitos (OpenRelay)
-        {
-          urls: [
-            "turn:openrelay.metered.ca:80",
-            "turn:openrelay.metered.ca:443",
-            "turn:openrelay.metered.ca:443?transport=tcp"
-          ],
-          username: "openrelayproject",
-          credential: "openrelayproject",
-        },
-      ],
+  constructor({ initiator, stream }) {
+    // ICE servers vêm do servidor de sinalização (loadIceServers deve ser chamado antes)
+    this._pc = new RTCPeerConnection({
+      iceServers: getIceServers(),
       iceCandidatePoolSize: 10
     });
     this.handlers = {};
-    this.trickle = trickle;
+    this.initiator = initiator;
+    // Em colisão de ofertas, o lado "polite" cede e o "impolite" mantém a sua
+    this.polite = !initiator;
+    this.makingOffer = false;
+    this.ignoreOffer = false;
+    this.iceRestarts = 0;
+    this.disconnectTimer = null;
     this.candidateQueue = [];
 
     if (stream) {
       console.log("[WebRTC] Adding local tracks to PeerConnection");
       stream.getTracks().forEach(track => this._pc.addTrack(track, stream));
+    } else if (initiator) {
+      // Sem mídia local ainda: oferece só recebimento para a conexão começar mesmo assim
+      this._pc.addTransceiver('audio', { direction: 'recvonly' });
+      this._pc.addTransceiver('video', { direction: 'recvonly' });
     }
 
-    this._pc.onicecandidate = (e) => {
+    // Toda oferta (inicial, novo stream, ICE restart) sai daqui
+    this._pc.onnegotiationneeded = async () => {
       try {
-        console.log('[WebRTC] onicecandidate event:', e.candidate ? 'candidate' : 'null-end');
-        if (e.candidate) console.log('[WebRTC] Candidate snippet:', (e.candidate.candidate || '').slice(0, 120));
-      } catch (err) {}
-      if (!this.trickle) {
-        if (!e.candidate) {
-          console.log('[WebRTC] Emitting bundled localDescription (non-trickle)');
-          this.emit("signal", this._pc.localDescription);
-        }
-      } else {
-        // Envia o candidato (mesmo que seja null, para sinalizar o fim da coleta)
-        this.emit("signal", { candidate: e.candidate });
+        this.makingOffer = true;
+        await this._pc.setLocalDescription();
+        this.emit("signal", this._pc.localDescription);
+      } catch (err) {
+        console.error("[WebRTC] Erro ao negociar:", err);
+      } finally {
+        this.makingOffer = false;
       }
+    };
+
+    this._pc.onicecandidate = (e) => {
+      // Envia o candidato (mesmo que seja null, para sinalizar o fim da coleta)
+      this.emit("signal", { candidate: e.candidate });
     };
 
     this._pc.ontrack = (e) => {
       console.log("[WebRTC] Track received:", e.track.kind, "| Stream count:", e.streams ? e.streams.length : 0);
       if (e.streams && e.streams[0]) {
-        console.log("[WebRTC] Emitting stream from track event");
         this.emit("stream", e.streams[0]);
       } else {
-        console.log("[WebRTC] Fallback: creating MediaStream from track");
-        const inboundStream = new MediaStream([e.track]);
-        this.emit("stream", inboundStream);
+        this.emit("stream", new MediaStream([e.track]));
       }
     };
 
     this._pc.oniceconnectionstatechange = () => {
-      console.log("[WebRTC] ICE Connection State:", this._pc.iceConnectionState);
+      const state = this._pc.iceConnectionState;
+      console.log("[WebRTC] ICE Connection State:", state);
+      clearTimeout(this.disconnectTimer);
+      if (state === 'connected' || state === 'completed') {
+        this.iceRestarts = 0;
+        this.logSelectedCandidate();
+      } else if (state === 'disconnected') {
+        // Ex.: celular trocou de Wi-Fi para 4G. Se não voltar sozinho, reinicia o ICE
+        this.disconnectTimer = setTimeout(() => this.restartIce(), 4000);
+      } else if (state === 'failed') {
+        this.restartIce();
+      }
     };
-
-    if (initiator) {
-      this._pc.createOffer().then(offer => {
-        return this._pc.setLocalDescription(offer).then(() => {
-          if (this.trickle) this.emit("signal", offer);
-        });
-      }).catch(err => console.error(err));
-    }
   }
 
   on(event, fn) { this.handlers[event] = fn; }
   emit(event, data) { if (this.handlers[event]) this.handlers[event](data); }
 
-  signal(data) {
+  async signal(data) {
     if (!data) return;
-    
-    // Proteção contra sinais duplicados ou fora de ordem
-    if (data.type === 'offer' || data.type === 'answer') {
-      try { console.log('[WebRTC] signal() processando:', data.type, 'Estado:', this._pc.signalingState); } catch(e) {}
-      
-      // Se recebermos uma oferta e já tivermos uma oferta local pendente (Glare), o RTCPeerConnection cuidará disso
-      // Mas para evitar erros de estado, vamos apenas processar se for compatível
-      this._pc.setRemoteDescription(new RTCSessionDescription(data))
-        .then(() => {
-          // Process queued candidates
-          this.candidateQueue.forEach(candidate => {
-            if (candidate) {
-              this._pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(err => console.error(err));
-            } else {
-              console.log("[WebRTC] Processed queued end-of-candidates marker");
-            }
-          });
-          this.candidateQueue = [];
-
-          if (data.type === 'offer') {
-            return this._pc.createAnswer().then(answer => {
-              return this._pc.setLocalDescription(answer).then(() => {
-                if (this.trickle) this.emit("signal", answer);
-              });
-            });
-          }
-        })
-        .catch(err => console.error(err));
-    } else if ('candidate' in data) {
-      if (this._pc.remoteDescription) {
-        if (data.candidate) {
-          this._pc.addIceCandidate(new RTCIceCandidate(data.candidate)).catch(err => console.error(err));
-        } else {
-          console.log("[WebRTC] End of candidates reached");
+    try {
+      if (data.type === 'offer' || data.type === 'answer') {
+        const offerCollision = data.type === 'offer' && (this.makingOffer || this._pc.signalingState !== 'stable');
+        this.ignoreOffer = !this.polite && offerCollision;
+        if (this.ignoreOffer) {
+          console.log('[WebRTC] Colisão de ofertas: mantendo a oferta local');
+          return;
         }
-      } else {
-        // Queue all candidates including null (end-of-candidates marker)
-        this.candidateQueue.push(data.candidate);
+        if (offerCollision) await this._pc.setLocalDescription({ type: 'rollback' });
+
+        await this._pc.setRemoteDescription(data);
+        const queued = this.candidateQueue;
+        this.candidateQueue = [];
+        for (const candidate of queued) await this.addCandidate(candidate);
+
+        if (data.type === 'offer') {
+          await this._pc.setLocalDescription();
+          this.emit("signal", this._pc.localDescription);
+        }
+      } else if ('candidate' in data) {
+        if (this._pc.remoteDescription) await this.addCandidate(data.candidate);
+        else this.candidateQueue.push(data.candidate);
       }
+    } catch (err) {
+      console.error('[WebRTC] Erro ao processar sinal:', err);
     }
   }
 
+  async addCandidate(candidate) {
+    if (!candidate) return;
+    try {
+      await this._pc.addIceCandidate(candidate);
+    } catch (err) {
+      // Candidatos da oferta que ignoramos numa colisão são descartados
+      if (!this.ignoreOffer) console.error('[WebRTC] Erro ao adicionar candidato:', err);
+    }
+  }
+
+  // addTrack/removeTrack disparam onnegotiationneeded, que renegocia sozinho
   addStream(stream) {
     if (!stream) return;
+    const sending = this._pc.getSenders().map(s => s.track);
     stream.getTracks().forEach(track => {
-      this._pc.addTrack(track, stream);
+      if (!sending.includes(track)) this._pc.addTrack(track, stream);
     });
-
-    if (this._pc.signalingState === 'stable') {
-      console.log('[WebRTC] Renegociando para novo stream...');
-      this._pc.createOffer().then(offer => {
-        return this._pc.setLocalDescription(offer).then(() => {
-          this.emit("signal", offer);
-        });
-      }).catch(err => console.error("[WebRTC] Erro ao renegociar addStream:", err));
-    }
   }
 
   removeStream(stream) {
@@ -138,21 +128,40 @@ export class Peer {
     const senders = this._pc.getSenders();
     stream.getTracks().forEach(track => {
       const sender = senders.find(s => s.track === track);
-      if (sender) {
-        this._pc.removeTrack(sender);
-      }
+      if (sender) this._pc.removeTrack(sender);
     });
+  }
 
-    // Trigger re-negotiation
-    this._pc.createOffer().then(offer => {
-      try { console.log('[WebRTC] removeStream created offer sdpLen=', offer.sdp ? offer.sdp.length : 0); } catch(e) {}
-      return this._pc.setLocalDescription(offer).then(() => {
-        this.emit("signal", offer);
+  replaceTrack(oldTrack, newTrack) {
+    const sender = this._pc.getSenders().find(s => s.track === oldTrack);
+    if (sender) return sender.replaceTrack(newTrack);
+  }
+
+  // Só quem iniciou a conexão reinicia o ICE, evitando ofertas simultâneas dos dois lados
+  restartIce() {
+    if (!this.initiator || this.iceRestarts >= 3 || this._pc.signalingState === 'closed') return;
+    this.iceRestarts++;
+    console.warn(`[WebRTC] Conexão caiu, reiniciando ICE (tentativa ${this.iceRestarts}/3)`);
+    this._pc.restartIce();
+  }
+
+  // Mostra no console se a mídia está indo direto (host/srflx) ou pelo TURN (relay)
+  async logSelectedCandidate() {
+    try {
+      const stats = await this._pc.getStats();
+      stats.forEach(report => {
+        if (report.type === 'candidate-pair' && report.nominated && report.state === 'succeeded') {
+          const local = stats.get(report.localCandidateId);
+          const remote = stats.get(report.remoteCandidateId);
+          console.log(`[WebRTC] Conectado via local=${local?.candidateType} remoto=${remote?.candidateType}`);
+        }
       });
-    }).catch(err => console.error("Error creating offer during removeStream:", err));
+    } catch (e) {}
   }
 
   destroy() {
+    clearTimeout(this.disconnectTimer);
+    this.handlers = {};
     this._pc.close();
   }
 }

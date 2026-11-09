@@ -1,9 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Clock, Calendar, ArrowRight, X } from 'lucide-react';
+import { Bell, Calendar, Video } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 
-export default function HeaderNotification() {
+// Sino com as reuniões que ainda vão acontecer hoje
+export default function HeaderNotification({ variant = 'default' }) {
   const { meetings, setView, handleStartMeeting } = useChat();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -12,77 +12,58 @@ export default function HeaderNotification() {
   const upcomingMeetings = meetings.filter(m => {
     if (m.type !== 'meeting') return false;
     const d = new Date(m.date);
-    return d.getDate() === today.getDate() && 
-           d.getMonth() === today.getMonth() && 
-           d.getFullYear() === today.getFullYear() &&
-           d.getTime() > today.getTime();
+    return d.toDateString() === today.toDateString() && d.getTime() > today.getTime();
   }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const isRail = variant === 'rail';
+  const buttonClass = isRail
+    ? `w-12 h-12 transition-all duration-200 ${isOpen ? 'rounded-2xl bg-brand text-white' : 'rounded-3xl bg-surface text-ink-2 hover:rounded-2xl hover:bg-brand hover:text-white'}`
+    : `w-8 h-8 rounded-md text-ink-2 hover:bg-hover ${isOpen ? 'bg-hover text-ink' : ''}`;
+
   return (
     <div className="relative" ref={dropdownRef}>
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className={`p-2 rounded-full transition-all relative ${isOpen ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}
-      >
-        <Bell size={20} className={upcomingMeetings.length > 0 ? 'animate-swing' : ''} />
+      <button onClick={() => setIsOpen(!isOpen)} className={`relative flex items-center justify-center transition-colors ${buttonClass}`} title="Notificações">
+        <Bell className="w-[18px] h-[18px]" />
         {upcomingMeetings.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white">
+          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center">
             {upcomingMeetings.length}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 bg-white border border-slate-100 rounded-[2rem] shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-5 border-b border-slate-50 bg-slate-50/50">
-            <h3 className="font-black text-slate-900 text-sm uppercase tracking-widest flex items-center gap-2">
-              <Calendar size={16} className="text-indigo-600" /> Próximas Reuniões
-            </h3>
+        <div className={`menu absolute w-80 z-[120] text-ink py-0 overflow-hidden ${isRail ? 'left-full bottom-0 ml-3' : 'right-0 top-full mt-2'}`}>
+          <div className="px-4 py-3 border-b border-line flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-brand" />
+            <h3 className="font-semibold">Próximas reuniões de hoje</h3>
           </div>
-          
-          <div className="max-h-[300px] overflow-y-auto">
+          <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
             {upcomingMeetings.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Tudo limpo por hoje!</p>
-              </div>
+              <p className="px-4 py-8 text-center text-ink-2">Nenhuma reunião pelo resto do dia.</p>
             ) : (
               upcomingMeetings.map(m => (
-                <div key={m.id} className="p-4 border-b border-slate-50 hover:bg-indigo-50/30 transition-all group">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
-                      {new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-2 truncate">{m.title}</h4>
-                  <button 
-                    onClick={() => {
-                      handleStartMeeting(`meeting_${m.id}`);
-                      setIsOpen(false);
-                    }}
-                    className="flex items-center gap-1 text-[10px] font-black text-indigo-600 uppercase tracking-tighter group-hover:gap-2 transition-all"
-                  >
-                    Entrar agora <ArrowRight size={12} />
+                <div key={m.id} className="px-4 py-3 border-b border-line last:border-0 flex items-center gap-3">
+                  <span className="text-xs font-semibold text-brand-ink bg-brand-soft rounded px-2 py-1 shrink-0">
+                    {new Date(m.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <p className="flex-1 truncate font-semibold">{m.title}</p>
+                  <button onClick={() => { handleStartMeeting(`meeting_${m.id}`); setIsOpen(false); }} className="btn-primary h-7 px-2 text-xs">
+                    <Video className="w-3.5 h-3.5" /> Entrar
                   </button>
                 </div>
               ))
             )}
           </div>
-          
-          <button 
-            onClick={() => { setView('calendar'); setIsOpen(false); }}
-            className="w-full p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-slate-50 hover:text-indigo-600 transition-all"
-          >
-            Ver agenda completa
+          <button onClick={() => { setView('calendar'); setIsOpen(false); }} className="w-full py-2.5 text-sm font-semibold text-brand hover:bg-hover border-t border-line">
+            Abrir agenda
           </button>
         </div>
       )}

@@ -1,3 +1,5 @@
+import HiddenAudio from '../shared/HiddenAudio';
+import { applyOutputDevice } from '../../../media/prefs';
 import React, { useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Signal, EyeOff, Eye, Hand, ShieldCheck, ZoomIn, RotateCcw, Monitor } from "lucide-react";
@@ -25,8 +27,9 @@ function DesktopVideoTile({ stream, name, avatarUrl, muted = false, isLocal = fa
     <div className={`relative w-full h-full bg-[#080808] border-[0.5px] border-white/5 flex items-center justify-center overflow-hidden group transition-all duration-300 
       ${handRaised ? 'ring-inset ring-4 ring-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.3)]' : isSpeaking ? 'ring-inset ring-2 ring-blue-500/50' : ''}`}>
 
+      {stream && !isLocal && !muted && !isCamOn && <HiddenAudio stream={stream} />}
       {stream && isCamOn ? (
-        <video ref={ref} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
+        <video ref={ref} onLoadedMetadata={(e) => !isLocal && applyOutputDevice(e.currentTarget)} autoPlay playsInline muted={isLocal || muted} className={`w-full h-full ${isScreenSharing ? 'object-contain' : 'object-cover'}`} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-[#0a0a0a]">
           {avatarUrl ? (

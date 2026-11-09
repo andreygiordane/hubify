@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Mail, Lock, User, ArrowRight, Check, UserCircle, Mic, Headphones, Video, MessageCircle, Shield, ChevronLeft, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from './config';
 
 const passwordRequirements = [
   { id: 'length', label: 'Mínimo de 8 caracteres', test: (pw) => pw.length >= 8 },
@@ -9,9 +10,9 @@ const passwordRequirements = [
 ];
 
 const getStrength = (score) => {
-  if (score === 4) return { label: 'Forte', color: 'text-emerald-500', bar: 'bg-emerald-500' };
-  if (score >= 2) return { label: 'Média', color: 'text-amber-500', bar: 'bg-amber-500' };
-  return { label: 'Fraca', color: 'text-rose-500', bar: 'bg-rose-500' };
+  if (score === 4) return { label: 'Forte', color: 'text-success', bar: 'bg-success' };
+  if (score >= 2) return { label: 'Média', color: 'text-warning', bar: 'bg-warning' };
+  return { label: 'Fraca', color: 'text-danger', bar: 'bg-danger' };
 };
 
 export default function Auth({ onLogin }) {
@@ -38,10 +39,10 @@ export default function Auth({ onLogin }) {
   };
 
   const techFeatures = [
-    { icon: <Video size={14} />, label: 'Vídeo HD' },
-    { icon: <MessageCircle size={14} />, label: 'Chat Inteligente' },
-    { icon: <Mic size={14} />, label: 'Áudio HD' },
-    { icon: <Headphones size={14} />, label: 'Sem Ruído' },
+    { icon: <MessageCircle size={16} />, label: 'Chat em tempo real' },
+    { icon: <Video size={16} />, label: 'Videochamadas' },
+    { icon: <Mic size={16} />, label: 'Chamadas de áudio' },
+    { icon: <Headphones size={16} />, label: 'Reuniões e tela' },
   ];
 
   const handleChange = (e) => {
@@ -67,7 +68,7 @@ export default function Auth({ onLogin }) {
     setLoading(true);
     const endpoint = isLogin ? '/auth/login' : '/auth/register';
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = API_URL;
       const base = apiUrl || '';
       let payload = formData;
       if (isLogin) {
@@ -118,7 +119,7 @@ export default function Auth({ onLogin }) {
 
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8082/api';
+      const apiUrl = API_URL;
       const res = await fetch(`${apiUrl}/auth/users/${mustUpdateUser.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -136,251 +137,143 @@ export default function Auth({ onLogin }) {
     }
   };
 
+  const field = (name, label, Icon, props = {}) => (
+    <label className="block">
+      <span className="block text-sm font-semibold text-ink mb-1.5">{label}</span>
+      <span className="relative block">
+        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4 pointer-events-none" />
+        <input name={name} value={formData[name]} onChange={handleChange} className="input h-10 pl-9" {...props} />
+      </span>
+    </label>
+  );
+
+  const Requirements = ({ value }) => (
+    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 mt-3">
+      {passwordRequirements.map((req) => {
+        const isMet = req.test(value);
+        return (
+          <li key={req.id} className={`flex items-center gap-2 text-xs ${isMet ? 'text-success' : 'text-ink-2'}`}>
+            <span className={`w-4 h-4 rounded-full flex items-center justify-center ${isMet ? 'bg-success text-white' : 'border border-line'}`}>{isMet && <Check size={10} strokeWidth={3} />}</span>
+            {req.label}
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const Spinner = () => <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />;
+
   return (
-    <div className="app-viewport">
-      <div className="h-full bg-white md:bg-[#09090b] text-[#09090b] md:text-[#fafafa] font-sans selection:bg-indigo-500/30 flex flex-col md:flex-row overflow-hidden">
-      <div className="hidden md:flex relative z-10 w-full md:w-1/2 lg:w-[55%] p-16 flex-col justify-between overflow-hidden border-r border-zinc-800/50">
-        <div className="absolute top-[-5%] left-[-5%] w-[70%] h-[70%] bg-indigo-600/10 rounded-full blur-[80px] md:blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-5%] right-[-5%] w-[50%] h-[50%] bg-blue-600/5 rounded-full blur-[70px] md:blur-[100px] pointer-events-none" />
-
-        <div className="relative z-10">
-          <div className="mb-8 md:mb-24 flex flex-col items-center md:items-start text-center md:text-left">
-            <img src="/image/logo.png" alt="Hubify Logo" className="h-12 md:h-16 w-auto object-contain" />
-            <div className="w-10 md:w-12 h-1 bg-indigo-600 mt-1 md:mt-2 rounded-full shadow-[0_0_20px_rgba(79,70,229,0.5)]" />
+    <div className="app-viewport bg-app">
+      <div className="h-full flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
+        {/* Painel da marca */}
+        <aside className="relative md:w-[44%] lg:w-[48%] bg-topbar text-white px-6 pt-10 pb-10 md:p-14 flex flex-col justify-between overflow-hidden shrink-0">
+          <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-brand/30 blur-3xl pointer-events-none" />
+          <div className="absolute -left-16 bottom-0 w-80 h-80 rounded-full bg-chat-accent/15 blur-3xl pointer-events-none" />
+          <div className="relative">
+            <img src="/image/logo.png" alt="Hubify" className="h-10 md:h-14 w-auto object-contain" />
           </div>
-
-          <div className="max-w-xl text-center md:text-left">
-            <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight leading-[1.1] mb-4 md:mb-6">
-              Sua equipe conectada, <br className="hidden sm:block" />
-              <span className="text-zinc-500 italic font-medium">em qualquer lugar.</span>
-            </h1>
-            <p className="text-zinc-400 text-base md:text-xl max-w-md mx-auto md:mx-0 leading-relaxed">A plataforma definitiva para chat corporativo e videoconferências de alta performance.</p>
+          <div className="relative mt-6 md:mt-0">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-semibold leading-tight">Sua equipe conectada,<br /><span className="text-white/60">em qualquer lugar.</span></h1>
+            <p className="hidden md:block text-white/70 text-lg mt-4 max-w-md">Chat, chamadas de vídeo e áudio, reuniões e compartilhamento de tela em um só lugar.</p>
+            <ul className="hidden md:grid grid-cols-2 gap-3 mt-10 max-w-md">
+              {techFeatures.map((f) => (
+                <li key={f.label} className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2.5">
+                  <span className="w-8 h-8 rounded-md bg-white/10 flex items-center justify-center text-white">{f.icon}</span>
+                  <span className="text-sm">{f.label}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
+          <p className="relative hidden md:block text-xs text-white/40">© {new Date().getFullYear()} Hubify Workspace</p>
+        </aside>
 
-        <div className="relative z-10 mt-10 md:mt-12 mb-2 flex flex-col items-center md:items-start">
-          <div className="inline-flex flex-wrap justify-center md:justify-start items-center gap-1 p-1 bg-zinc-900/50 backdrop-blur-md border border-zinc-800/80 rounded-2xl sm:rounded-2xl">
-            {techFeatures.map((feature, idx) => (
-              <React.Fragment key={idx}>
-                <div className="flex items-center gap-1.5 px-2.5 py-2 sm:px-3 rounded-xl hover:bg-zinc-800/50 transition-colors group">
-                  <div className="text-indigo-400 group-hover:text-indigo-300 transition-colors">{feature.icon}</div>
-                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-zinc-400 group-hover:text-zinc-200 transition-colors whitespace-nowrap">{feature.label}</span>
-                </div>
-                {idx < techFeatures.length - 1 && <div className="h-3 w-px bg-zinc-800 hidden sm:block" />}
-              </React.Fragment>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center gap-1.5 text-zinc-600 md:ml-2">
-            <Shield size={10} className="text-emerald-500/60" />
-            <span className="text-[9px] font-semibold tracking-tight uppercase">Encryption active</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="md:hidden w-full bg-[#09090b] h-72 relative flex flex-col items-center justify-center overflow-hidden rounded-b-[40px] shadow-2xl border-b border-zinc-800/50">
-        <div className="absolute top-[-20%] left-[-10%] w-[80%] h-[80%] bg-indigo-600/20 rounded-full blur-[80px] pointer-events-none" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-blue-600/10 rounded-full blur-[60px] pointer-events-none" />
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-20 pointer-events-none" />
-
-        {!isLogin && (
-          <button onClick={toggleMode} className="absolute top-8 left-6 text-white/60 hover:text-white transition-colors">
-            <ChevronLeft size={24} />
-          </button>
-        )}
-
-        <div className="relative z-10 flex flex-col items-center text-center px-6">
-          <div className="mb-4">
-            <img src="/image/logo.png" alt="Hubify Logo" className="h-14 w-auto object-contain drop-shadow-[0_0_15px_rgba(79,70,229,0.4)]" />
-            <div className="w-10 h-1 bg-indigo-600 mx-auto mt-1 rounded-full shadow-[0_0_10px_rgba(79,70,229,0.5)]" />
-          </div>
-          
-          <h2 className="text-xl font-bold text-white mb-2">
-            {isLogin ? 'Olá, que bom ver você!' : 'Seja muito bem-vindo!'}
-          </h2>
-          <p className="text-zinc-400 text-xs max-w-[240px] leading-relaxed">
-            {isLogin 
-              ? 'Acesse sua conta para continuar de onde parou.' 
-              : 'Junte-se à nossa rede e conecte-se com sua equipe.'}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col justify-center p-8 sm:p-12 md:p-16 lg:p-24 bg-white md:bg-[#09090b]/40 backdrop-blur-sm relative z-20 md:mt-0 -mt-10 md:rounded-none rounded-t-[40px] md:shadow-none shadow-[-10px_-10px_30px_rgba(0,0,0,0.05)]">
-        <div className="w-full max-w-md mx-auto">
-          <div className="hidden md:block mb-10">
-            <h2 className="text-3xl font-semibold text-white mb-2">
-              {mustUpdateUser ? 'Atualizar Senha' : (isLogin ? 'Bem-vindo de volta' : 'Começar agora')}
+        {/* Formulário */}
+        <main className="flex-1 flex items-start md:items-center justify-center p-4 md:p-10 md:overflow-y-auto">
+          <div className="card w-full max-w-[440px] p-6 md:p-8 -mt-6 md:mt-0 relative">
+            <h2 className="text-2xl font-semibold text-ink">
+              {mustUpdateUser ? 'Atualize sua senha' : (isLogin ? 'Entrar' : 'Criar conta')}
             </h2>
-            <p className="text-zinc-500">
-              {mustUpdateUser 
-                ? 'Sua conta usa um padrão de senha antigo. Por favor, crie uma nova senha segura.' 
-                : (isLogin ? 'Insira suas credenciais para entrar.' : 'Crie sua conta corporativa gratuita.')}
+            <p className="text-ink-2 mt-1 mb-6">
+              {mustUpdateUser
+                ? 'Sua conta usa um padrão de senha antigo. Crie uma nova senha segura para continuar.'
+                : (isLogin ? 'Use seu usuário ou e-mail corporativo.' : 'Leva menos de um minuto.')}
             </p>
-          </div>
 
-          {error && <div className="bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-xl mb-6 text-sm font-medium">{error}</div>}
+            {error && <div className="bg-danger-soft text-danger border border-danger/30 px-3 py-2.5 rounded-md mb-5 text-sm">{error}</div>}
 
-          {mustUpdateUser ? (
-            <form className="space-y-6" onSubmit={handleUpdatePassword}>
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-600 ml-1">Nova Senha</label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={updateForm.password}
-                    onChange={(e) => setUpdateForm({ ...updateForm, password: e.target.value })}
-                    className="w-full bg-zinc-900/20 border border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 transition-all text-zinc-200"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-600 ml-1">Confirmar Nova Senha</label>
-                <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    value={updateForm.confirmPassword}
-                    onChange={(e) => setUpdateForm({ ...updateForm, confirmPassword: e.target.value })}
-                    className="w-full bg-zinc-900/20 border border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 transition-all text-zinc-200"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-4 p-4 bg-zinc-950/50 border border-zinc-800 rounded-2xl space-y-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Requisitos da Nova Senha</span>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {passwordRequirements.map((req) => {
-                    const isMet = req.test(updateForm.password);
-                    return (
-                      <div key={req.id} className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isMet ? 'bg-emerald-500/20' : 'bg-zinc-800'}`}>
-                          {isMet ? <Check size={8} className="text-emerald-500" /> : <div className="w-1 h-1 bg-zinc-600 rounded-full" />}
-                        </div>
-                        <span className={`text-[10px] ${isMet ? 'text-zinc-300' : 'text-zinc-600'}`}>{req.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <button type="submit" className="w-full bg-white text-black hover:bg-zinc-200 font-bold py-4 rounded-2xl transition-all flex items-center justify-center gap-2 group active:scale-[0.98]">
-                {loading ? <div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" /> : <span>Atualizar e Entrar</span>}
-              </button>
-              
-              <button type="button" onClick={() => setMustUpdateUser(null)} className="w-full text-zinc-500 text-xs hover:text-zinc-300 transition-colors">Voltar para Login</button>
-            </form>
-          ) : (
-            <form className="space-y-6" onSubmit={handleSubmit}>
-            {isLogin ? (
-              <div className="space-y-1">
-                <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-400 md:text-zinc-600 ml-1">E-mail ou Nome de usuário</label>
-                <div className="relative group">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                  <input name="username" value={formData.username} onChange={handleChange} type="text" placeholder="Usuário ou e-mail" className="w-full bg-zinc-50 md:bg-zinc-900/20 border border-zinc-200 md:border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 md:focus:border-zinc-500 transition-all text-zinc-900 md:text-zinc-200 placeholder:text-zinc-300 md:placeholder:text-zinc-700" />
-                </div>
-              </div>
+            {mustUpdateUser ? (
+              <form className="space-y-4" onSubmit={handleUpdatePassword}>
+                <label className="block">
+                  <span className="block text-sm font-semibold text-ink mb-1.5">Nova senha</span>
+                  <input type="password" value={updateForm.password} onChange={(e) => setUpdateForm({ ...updateForm, password: e.target.value })} className="input h-10" />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-semibold text-ink mb-1.5">Confirmar nova senha</span>
+                  <input type="password" value={updateForm.confirmPassword} onChange={(e) => setUpdateForm({ ...updateForm, confirmPassword: e.target.value })} className="input h-10" />
+                </label>
+                <Requirements value={updateForm.password} />
+                <button type="submit" className="btn-primary w-full h-10 mt-2">{loading ? <Spinner /> : 'Atualizar e entrar'}</button>
+                <button type="button" onClick={() => setMustUpdateUser(null)} className="btn-ghost w-full">Voltar para o login</button>
+              </form>
             ) : (
-              <>
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-400 md:text-zinc-600 ml-1">Nome de Exibição</label>
-                  <div className="relative group">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                    <input name="displayName" value={formData.displayName} onChange={handleChange} type="text" placeholder="Como você aparecerá" className="w-full bg-zinc-50 md:bg-zinc-900/20 border border-zinc-200 md:border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 md:focus:border-zinc-500 transition-all text-zinc-900 md:text-zinc-200 placeholder:text-zinc-300 md:placeholder:text-zinc-700" />
-                  </div>
-                </div>
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                {isLogin ? (
+                  field('username', 'Usuário ou e-mail', Mail, { type: 'text', autoComplete: 'username', placeholder: 'nome@empresa.com' })
+                ) : (
+                  <>
+                    {field('displayName', 'Nome completo', User, { type: 'text', placeholder: 'Como as pessoas verão você' })}
+                    {field('username', 'Nome de usuário', UserCircle, { type: 'text', autoComplete: 'username', placeholder: 'usuario' })}
+                    {field('email', 'E-mail corporativo', Mail, { type: 'email', autoComplete: 'email', placeholder: 'nome@empresa.com' })}
+                  </>
+                )}
 
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-400 md:text-zinc-600 ml-1">Nome de Usuário</label>
-                  <div className="relative group">
-                    <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                    <input name="username" value={formData.username} onChange={handleChange} type="text" placeholder="@usuario" className="w-full bg-zinc-50 md:bg-zinc-900/20 border border-zinc-200 md:border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 md:focus:border-zinc-500 transition-all text-zinc-900 md:text-zinc-200 placeholder:text-zinc-300 md:placeholder:text-zinc-700" />
-                  </div>
-                </div>
+                <label className="block">
+                  <span className="block text-sm font-semibold text-ink mb-1.5">Senha</span>
+                  <span className="relative block">
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-3 w-4 h-4 pointer-events-none" />
+                    <input
+                      name="password"
+                      value={password}
+                      onChange={handleChange}
+                      onFocus={() => !isLogin && setShowHints(true)}
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete={isLogin ? 'current-password' : 'new-password'}
+                      className="input h-10 pl-9 pr-10"
+                    />
+                    <button type="button" onClick={() => setShowPassword((c) => !c)} className="absolute right-1.5 top-1/2 -translate-y-1/2 icon-btn" title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}>
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </span>
+                </label>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-400 md:text-zinc-600 ml-1">Email Corporativo</label>
-                  <div className="relative group">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                    <input name="email" value={formData.email} onChange={handleChange} type="email" placeholder="nome@empresa.com" className="w-full bg-zinc-50 md:bg-zinc-900/20 border border-zinc-200 md:border-zinc-800/80 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:border-indigo-500 md:focus:border-zinc-500 transition-all text-zinc-900 md:text-zinc-200 placeholder:text-zinc-300 md:placeholder:text-zinc-700" />
+                {!isLogin && showHints && (
+                  <div className="rounded-md bg-subtle border border-line p-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-ink-2">Força da senha</span>
+                      <span className={`font-semibold ${passwordStrength.color}`}>{passwordStrength.label}</span>
+                    </div>
+                    <div className="flex gap-1 mt-2">
+                      {[1, 2, 3, 4].map((step) => <span key={step} className={`h-1 flex-1 rounded-full ${passwordScore >= step ? passwordStrength.bar : 'bg-line'}`} />)}
+                    </div>
+                    <Requirements value={formData.password} />
                   </div>
-                </div>
-              </>
+                )}
+
+                <button type="submit" disabled={loading} className="btn-primary w-full h-10 mt-2">
+                  {loading ? <Spinner /> : <>{isLogin ? 'Entrar' : 'Criar conta'} <ArrowRight size={16} /></>}
+                </button>
+              </form>
             )}
 
-            <div className="space-y-1">
-              <div className="flex justify-between items-center ml-1">
-                <label className="text-[10px] uppercase tracking-widest font-extrabold text-zinc-400 md:text-zinc-600">Senha</label>
-                {isLogin && <button type="button" className="text-[10px] font-bold text-indigo-600 md:text-indigo-400 uppercase tracking-tighter">Recuperar</button>}
-              </div>
-
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
-                <input
-                  name="password"
-                  value={password}
-                  onChange={(e) => {
-                    handleChange(e);
-                  }}
-                  onFocus={() => !isLogin && setShowHints(true)}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  className="w-full bg-zinc-50 md:bg-zinc-900/20 border border-zinc-200 md:border-zinc-800/80 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:border-indigo-500 md:focus:border-zinc-500 transition-all text-zinc-900 md:text-zinc-200 placeholder:text-zinc-300 md:placeholder:text-zinc-700"
-                />
-                <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 md:text-zinc-600 hover:text-indigo-500 transition-colors p-1">
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-
-              {!isLogin && showHints && (
-                <div className="mt-4 p-4 bg-zinc-50 md:bg-zinc-950/50 border border-zinc-100 md:border-zinc-800 rounded-2xl space-y-3 animate-in fade-in zoom-in-95">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">Segurança</span>
-                    <span className={`text-[9px] font-bold uppercase ${passwordScore === 4 ? 'text-emerald-600' : 'text-amber-600'}`}>{passwordScore === 4 ? 'Forte' : 'Média'}</span>
-                  </div>
-
-                  <div className="h-1.5 w-full bg-zinc-200 md:bg-zinc-900 rounded-full flex gap-1 overflow-hidden">
-                    {[1, 2, 3, 4].map((step) => (
-                      <div key={step} className={`h-full flex-1 transition-all duration-500 ${passwordScore >= step ? 'bg-indigo-600' : 'bg-transparent'}`} />
-                    ))}
-                  </div>
-
-                  <div className="pt-1 grid grid-cols-1 gap-2">
-                    {passwordRequirements.map((req) => {
-                      const isMet = req.test(formData.password);
-                      return (
-                        <div key={req.id} className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full flex items-center justify-center transition-colors ${isMet ? 'bg-emerald-500/20' : 'bg-zinc-800'}`}>
-                            {isMet ? <Check size={8} className="text-emerald-500" /> : <div className="w-1 h-1 bg-zinc-600 rounded-full" />}
-                          </div>
-                          <span className={`text-[10px] transition-colors ${isMet ? 'text-zinc-300' : 'text-zinc-600'}`}>{req.label}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <button type="submit" className="w-full bg-[#09090b] md:bg-white text-white md:text-black hover:bg-zinc-800 md:hover:bg-zinc-200 font-bold py-4 rounded-2xl transition-all mt-4 flex items-center justify-center gap-2 group active:scale-[0.98] shadow-2xl md:shadow-xl shadow-indigo-500/10 min-h-[56px]">
-              {loading ? <div className="w-5 h-5 border-2 border-white/20 md:border-black/20 border-t-white md:border-t-black rounded-full animate-spin" /> : <><span>{isLogin ? 'Entrar' : 'Criar conta'}</span><ArrowRight size={18} /></>}
-            </button>
-          </form>
-          )}
-
-          <div className="mt-12 text-center">
-            <button onClick={toggleMode} className="text-xs text-zinc-500 flex flex-row items-center justify-center gap-1 mx-auto group py-2">
-              {isLogin ? 'Não tem uma conta?' : 'Já tem uma conta?'}
-              <span className="font-bold text-[#09090b] md:text-white group-hover:underline">{isLogin ? 'Cadastrar' : 'Entrar'}</span>
-            </button>
+            {!mustUpdateUser && (
+              <p className="mt-6 pt-5 border-t border-line text-center text-sm text-ink-2">
+                {isLogin ? 'Ainda não tem conta?' : 'Já tem uma conta?'}{' '}
+                <button onClick={toggleMode} className="font-semibold text-brand hover:underline">{isLogin ? 'Criar conta' : 'Entrar'}</button>
+              </p>
+            )}
           </div>
-        </div>
-      </div>
+        </main>
       </div>
     </div>
   );

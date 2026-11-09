@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, MoreHorizontal, BellOff, Bell, Trash2, Info, Plus, Users as UsersIcon, MessageSquare, ChevronRight, Camera, FileText, LogOut, Clock, AlertCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import { useChat } from '../../context/ChatContext';
 import { useAuth } from '../../context/AuthContext';
 import Avatar, { presenceOf } from '../ui/Avatar';
@@ -228,6 +228,10 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Botões de ação só aparecem enquanto o item é arrastado (senão vazam pelas bordas arredondadas)
+  const dragX = useMotionValue(0);
+  const actionsOpacity = useTransform(dragX, [-24, 0], [1, 0]);
+
   const mine = lastMsg && lastMsg.senderId === user?.id;
   const p = preview(lastMsg);
   const senderPrefix = room.isGroup && lastMsg && !mine ? `${(lastMsg.senderName || '').split(' ')[0]}: ` : mine ? 'Você: ' : '';
@@ -236,14 +240,14 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
   return (
     <div className="relative group md:my-0.5">
       {/* Ações ao arrastar para o lado (celular) */}
-      <div className="absolute inset-0 md:hidden flex justify-end rounded-xl overflow-hidden">
+      <motion.div style={{ opacity: actionsOpacity }} className="absolute inset-0 md:hidden flex justify-end rounded-xl overflow-hidden">
         <button onClick={(e) => { e.stopPropagation(); onOpenMenu(e.currentTarget.getBoundingClientRect()); }} className="w-[70px] bg-ink-3 flex items-center justify-center text-white">
           <MoreHorizontal size={22} />
         </button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="w-[70px] bg-danger flex items-center justify-center text-white">
           <Trash2 size={22} />
         </button>
-      </div>
+      </motion.div>
 
       <motion.div
         drag={isMobile ? 'x' : false}
@@ -253,7 +257,7 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
         dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
         onClick={onOpen}
         className={`relative z-10 flex items-center gap-3 px-2.5 md:px-2 py-2.5 md:py-1.5 rounded-xl md:rounded-md cursor-pointer transition-colors ${isActive ? 'bg-hover' : 'bg-surface md:bg-subtle active:bg-hover md:hover:bg-hover/60'}`}
-        style={{ touchAction: 'pan-y' }}
+        style={{ x: dragX, touchAction: 'pan-y' }}
       >
         <Avatar src={room.avatarUrl} name={room.name} size={isMobile ? 52 : 36} status={presence} square={room.isGroup} />
 

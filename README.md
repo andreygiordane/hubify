@@ -5,7 +5,7 @@
 # Hubify Workspace
 ### Plataforma Corporativa de Comunicação em Tempo Real
 
-[![Version](https://img.shields.io/badge/version-5.0.0-6366f1?style=for-the-badge&logo=github)](https://github.com/andreygiordane/hubify)
+[![Version](https://img.shields.io/badge/version-6.0.0-6366f1?style=for-the-badge&logo=github)](https://github.com/andreygiordane/hubify)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![Java](https://img.shields.io/badge/Java-Spring%20Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -24,9 +24,23 @@
 
 ---
 
+<p align="center">
+  <img src="docs/screenshots/desktop-chat.png" alt="Conversa em balões no desktop" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/mobile-conversas.png" alt="Lista de conversas no celular" width="24%"/>
+  <img src="docs/screenshots/mobile-chat.png" alt="Conversa no celular" width="24%"/>
+  <img src="docs/screenshots/mobile-perfil.png" alt="Perfil e status no celular" width="24%"/>
+</p>
+
+---
+
 ## 📋 Índice
 
 - [Visão Geral](#visão-geral)
+- [Telas](#-telas)
+- [Novidades da v6.0](#-novidades-da-v60)
 - [Novidades da v5.0](#-novidades-da-v50)
 - [Arquitetura](#arquitetura)
 - [Stack Tecnológica](#stack-tecnológica)
@@ -65,6 +79,64 @@ A partir da **v5.0**, o projeto é **100% executável localmente** via Docker Co
 | 🌐 **Responsivo** | Interfaces separadas e otimizadas para Desktop e Mobile |
 | 🔒 **Autenticação Segura** | Login/registro com validação de senha forte e troca obrigatória |
 | 👤 **Perfis de Usuário** | Avatar gerado automaticamente, status de presença, bio |
+
+---
+
+## 📸 Telas
+
+> Capturas feitas com dados de demonstração (usuários fictícios).
+
+| Conversa em balões | Dados do contato |
+|---|---|
+| ![Conversa](docs/screenshots/desktop-chat.png) | ![Dados do contato](docs/screenshots/desktop-perfil.png) |
+
+| Grupo no tema escuro |
+|---|
+| ![Grupo no tema escuro](docs/screenshots/desktop-grupo-escuro.png) |
+
+| Lista de conversas | Conversa | Perfil e status |
+|---|---|---|
+| ![Lista no celular](docs/screenshots/mobile-conversas.png) | ![Conversa no celular](docs/screenshots/mobile-chat.png) | ![Perfil no celular](docs/screenshots/mobile-perfil.png) |
+
+---
+
+## 🚀 Novidades da v6.0
+
+A versão 6.0 foca em **estabilidade das conversas e das chamadas** e numa interface de chat no padrão dos mensageiros modernos.
+
+### 💬 Mensagens confiáveis (como no WhatsApp)
+
+> **Antes:** cada aparelho baixava *todas* as mensagens do sistema a cada 2 segundos; a conversa ficava lenta e a mensagem só aparecia na consulta seguinte.
+
+> **Agora:** a mensagem vai pelo socket e só é marcada como enviada quando o servidor grava. Só o que mudou é sincronizado.
+
+- **Status de entrega** em cada balão: 🕓 enviando → ✓ enviada → ✓✓ lida
+- **Fila de envio offline** — sem conexão, a mensagem fica pendente (mesmo recarregando a página) e é reenviada sozinha; se falhar, aparece *Tentar novamente*
+- **Sincronização incremental** (`GET /api/data/messages/sync?since=`) ao abrir o app, reconectar ou voltar do bloqueio
+- **Privacidade** — cada mensagem é entregue apenas aos participantes da conversa
+- **Horário do servidor** para ordenar mensagens e calcular "lida" (independe do relógio do celular)
+- Reconexão automática sem limite de tentativas
+
+### 📞 Chamadas mais rápidas e estáveis
+
+- **Convites instantâneos** pelo socket (antes passavam pelo banco + polling)
+- Toca em todos os aparelhos do contato; ao atender em um, os outros param
+- Respostas **Ocupado**, **Recusada** e **Sem resposta** chegam na hora para quem liga
+- Câmera, microfone e servidores TURN são preparados **antes** de entrar na sala; se a câmera estiver ocupada, entra só com áudio
+- **Fix:** tela preta para quem assiste ao encerrar o compartilhamento de tela
+- **Fix:** quem só abria a conversa virava participante "fantasma" da chamada
+
+### 🎨 Interface
+
+- **Conversa em balões** — suas mensagens à direita, as do contato à esquerda, com resposta citada, anexos e hora dentro do balão
+- **Dados do contato** reorganizados (foto grande, @usuário, status, sobre, cargo e e-mail)
+- **Mobile redesenhado** — cabeçalho com sua foto, busca e filtros em pílulas, itens maiores e painel de perfil que sobe da parte de baixo (fecha ao abrir uma conversa)
+
+### 🔧 Backend
+
+- Coleções com colunas indexadas (`doc_key`, `room_id`, `updated_at`) e migração automática dos dados existentes
+- `PATCH /api/data/{collection}/{id}` com merge no servidor
+- Correção automática de listas de conversas corrompidas por versões antigas
 
 ---
 
@@ -154,7 +226,7 @@ Browser
 | React | 18 | Framework UI |
 | Vite | 5 | Build tool |
 | Socket.IO Client | 4.x | Comunicação em tempo real |
-| simple-peer | latest | WebRTC abstraction |
+| WebRTC nativo | — | Chamadas P2P (classe `Peer` própria com *perfect negotiation*) |
 | Lucide React | latest | Ícones |
 | Tailwind CSS | 3 | Estilização |
 | Nginx | stable-alpine | Serving em produção |
@@ -274,6 +346,7 @@ docker compose logs -f
 hubify/
 ├── docker-compose.yml              # Orquestração de todos os serviços
 ├── README.md
+├── docs/screenshots/               # Capturas usadas neste README
 │
 ├── backend/                        # API REST — Spring Boot
 │   ├── Dockerfile
@@ -408,6 +481,7 @@ Servidor: `http://localhost:8080`
 
 ### Chat
 
+- **Conversa em balões** — enviadas à direita, recebidas à esquerda
 - **Mensagens em tempo real** via Socket.IO com confirmação de entrega (🕓 enviando → ✓ enviada → ✓✓ lida)
 - **Fila de envio** — sem conexão, a mensagem fica pendente (inclusive após recarregar) e é reenviada sozinha ao reconectar
 - **Sincronização incremental** (`GET /api/data/messages/sync?since=`) ao abrir, reconectar ou voltar ao app — baixa só o que mudou
@@ -421,7 +495,7 @@ Servidor: `http://localhost:8080`
 
 ### Videoconferência (WebRTC)
 
-- **Peer-to-peer** direto entre browsers (STUN servers públicos)
+- **Peer-to-peer** direto entre browsers (STUN + TURN para redes diferentes)
 - **Câmera + microfone** com controle de mute/câmera no toolbar
 - **Compartilhamento de tela** — layout dedicado com miniatura da câmera sobreposta
 - **Desktop:** grid de participantes + layout fullscreen para screen share
@@ -465,7 +539,7 @@ SPRING_DATASOURCE_USERNAME=<user>
 SPRING_DATASOURCE_PASSWORD=<password>
 ```
 
-> Consulte [`DEPLOY_GCP.md`](DEPLOY_GCP.md) para o guia completo de deploy no Google Cloud Platform.
+> Para expor o ambiente local por um domínio próprio, veja os perfis `site` e `tunnel` (Cloudflare Tunnel) no `docker-compose.yml`.
 
 ---
 
@@ -473,7 +547,8 @@ SPRING_DATASOURCE_PASSWORD=<password>
 
 | Versão | Data | Destaques |
 |---|---|---|
-| **5.0.0** | Mai/2026 | Docker Compose 100% local, fix flickering screen share, fix mobile black screen, pinch-to-zoom mobile, sidebar rebrandeada, EmojiPicker múltipla seleção |
+| **6.0.0** | Nov/2026 | Mensagens com confirmação de entrega e fila offline, sincronização incremental, convites de chamada instantâneos, fix tela preta ao parar compartilhamento, chat em balões, mobile redesenhado |
+| 5.0.0 | Mai/2026 | Docker Compose 100% local, fix flickering screen share, fix mobile black screen, pinch-to-zoom mobile, sidebar rebrandeada, EmojiPicker múltipla seleção |
 | 4.5.0 | Mai/2026 | Documentação técnica completa, API docs, Socket.IO events guide |
 | 4.0.0 | Mai/2026 | Sincronização lógica moderna + sistema de vídeo monolítico estável, colunas TEXT no PostgreSQL |
 | 3.x | Abr/2026 | Deploy GCP Cloud Run, CI/CD, otimização de startup |
@@ -512,7 +587,7 @@ chore: tarefas de manutenção (deps, config, etc.)
 
 <div align="center">
 
-**Hubify Workspace v5.0** — Feito com ❤️ para comunicação corporativa de alta performance
+**Hubify Workspace v6.0** — Feito com ❤️ para comunicação corporativa de alta performance
 
 *Self-hosted · Open Source · Docker Ready*
 

@@ -3,7 +3,7 @@ import { MessageSquare, Video, Calendar, Users, UserPlus, Search, Settings } fro
 import { useAuth } from '../../context/AuthContext';
 import { useChat } from '../../context/ChatContext';
 import Avatar from '../ui/Avatar';
-import ProfileMenu from './ProfileMenu';
+import ProfileMenu, { ProfileSheet } from './ProfileMenu';
 import HeaderNotification from '../common/HeaderNotification';
 
 export const useNavItems = () => {
@@ -91,35 +91,35 @@ export default function Sidebar({ onOpenSearch }) {
         </div>
       </nav>
 
-      {/* Barra inferior (celular) */}
-      <div className={`md:hidden fixed bottom-0 inset-x-0 h-16 bg-rail border-t border-line flex items-stretch justify-around z-[100] transition-transform duration-200 ${
-        (view === 'chat' && selectedChatMobile) ? 'translate-y-full' : 'translate-y-0'
-      }`} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        {items.map(item => {
-          const active = view === item.id;
-          return (
-            <button key={item.id} onClick={() => setView(item.id)} className={`relative flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium ${active ? 'text-ink' : 'text-ink-3'}`}>
-              <span className={`relative px-4 py-1 rounded-full transition-colors ${active ? 'bg-brand-soft text-brand-ink' : ''}`}>
-                <item.icon className="w-5 h-5" strokeWidth={active ? 2.25 : 1.75} />
-                <Badge value={item.badge} className="-top-1.5 right-1" />
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
-        <div className="relative flex-1 flex">
-          <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="flex-1 flex flex-col items-center justify-center gap-1 text-[10px] font-medium text-ink-3">
-            <Avatar src={currentUserProfile?.avatarUrl} name={currentUserProfile?.name} size={26} status={userStatus} />
+      {/* Barra inferior (celular): some ao abrir uma conversa */}
+      <nav
+        className={`md:hidden fixed bottom-0 inset-x-0 bg-surface/95 backdrop-blur-md border-t border-line shadow-[0_-4px_16px_rgb(0_0_0/0.06)] z-[100] transition-transform duration-200 ${
+          (view === 'chat' && selectedChatMobile) ? 'translate-y-full' : 'translate-y-0'
+        }`}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div className="h-16 flex items-stretch justify-around px-1">
+          {items.map(item => {
+            const active = view === item.id;
+            return (
+              <button key={item.id} onClick={() => setView(item.id)} className={`relative flex-1 min-w-0 flex flex-col items-center justify-center gap-1 text-[11px] ${active ? 'text-brand font-semibold' : 'text-ink-3 font-medium'}`}>
+                <span className={`relative w-14 h-8 flex items-center justify-center rounded-full transition-colors duration-200 ${active ? 'bg-brand-soft' : ''}`}>
+                  <item.icon className="w-[22px] h-[22px]" strokeWidth={active ? 2.25 : 1.75} />
+                  <Badge value={item.badge} className="-top-1 right-1.5 ring-surface" />
+                </span>
+                <span className="truncate max-w-full">{item.label}</span>
+              </button>
+            );
+          })}
+          <button onClick={() => setShowProfileMenu(true)} className={`flex-1 min-w-0 flex flex-col items-center justify-center gap-1 text-[11px] ${showProfileMenu || view === 'settings' ? 'text-brand font-semibold' : 'text-ink-3 font-medium'}`}>
+            <span className="h-8 flex items-center justify-center">
+              <Avatar src={currentUserProfile?.avatarUrl} name={currentUserProfile?.name} size={26} status={userStatus} />
+            </span>
             Você
           </button>
-          {showProfileMenu && (
-            <>
-              <div className="fixed inset-0 z-[110]" onClick={() => setShowProfileMenu(false)} />
-              <ProfileMenu className="absolute bottom-full right-2 mb-2" />
-            </>
-          )}
         </div>
-      </div>
+      </nav>
+      <ProfileSheet />
     </>
   );
 }

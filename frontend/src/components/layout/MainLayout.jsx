@@ -7,11 +7,11 @@ import SuccessModal from '../common/SuccessModal';
 import DocumentPreviewModal from '../common/DocumentPreviewModal';
 
 export default function MainLayout({ children }) {
-  const { view, setShowProfileMenu } = useChat();
+  const { view, setShowProfileMenu, activeRoomId, selectedChatMobile } = useChat();
   const [showSearch, setShowSearch] = useState(false);
 
-  // Menus abertos não devem sobreviver à troca de tela
-  useEffect(() => { setShowProfileMenu(false); }, [view]);
+  // Menus abertos não devem sobreviver à troca de tela nem a abrir/fechar uma conversa
+  useEffect(() => { setShowProfileMenu(false); }, [view, activeRoomId, selectedChatMobile]);
 
   useEffect(() => {
     const onKey = (e) => {

@@ -27,8 +27,9 @@
 
   --chat-bg: 255 255 255;
   --chat-header: 255 255 255;
-  --bubble-in: 255 255 255;
-  --bubble-out: 255 255 255;
+  /* Balões: recebidas (cinza) à esquerda, enviadas (cor da marca) à direita */
+  --bubble-in: 240 241 244;
+  --bubble-out: 222 226 255;
   --bubble-ink: 30 31 34;
   --bubble-meta: 128 132 142;
   --chat-accent: 88 101 242;
@@ -59,8 +60,8 @@
 
   --chat-bg: 49 51 56;
   --chat-header: 49 51 56;
-  --bubble-in: 49 51 56;
-  --bubble-out: 49 51 56;
+  --bubble-in: 64 66 73;
+  --bubble-out: 62 68 122;
   --bubble-ink: 242 243 245;
   --bubble-meta: 128 132 142;
   --chat-accent: 103 115 245;

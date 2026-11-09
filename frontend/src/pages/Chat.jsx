@@ -3,7 +3,8 @@ import {
   Search, SendHorizontal, Trash2, Phone, Video, ChevronLeft, ChevronDown, Camera,
   Image as ImageIcon, FileText, Download, X, Plus, FileSpreadsheet, FileCode, FileArchive,
   Bell, BellOff, Pencil, CornerUpLeft, CornerUpRight, Copy, Forward, CheckCircle2, Circle, Smile, Check,
-  MoreHorizontal, Mail, Briefcase, UserPlus, Ban, Palette, LogOut, Keyboard, User as UserRound, Users
+  MoreHorizontal, Mail, Briefcase, UserPlus, Ban, Palette, LogOut, Keyboard, User as UserRound, Users,
+  Clock, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChat } from '../context/ChatContext';
@@ -44,12 +45,6 @@ const EMOJI_PROPS = {
 const isDarkTheme = () => document.documentElement.classList.contains('dark');
 const isTouch = () => window.matchMedia('(hover: none)').matches;
 
-const longStamp = (ts) => {
-  const day = formatDaySeparator(ts);
-  const time = formatTime(ts);
-  return day === 'Hoje' ? `hoje às ${time}` : day === 'Ontem' ? `ontem às ${time}` : `${new Date(ts).toLocaleDateString('pt-BR')} ${time}`;
-};
-
 export default function Chat() {
   const {
     chatRooms, activeRoomId, setActiveRoomId, allMessages,
@@ -63,7 +58,7 @@ export default function Chat() {
     handleDeleteMessage, handleEditMessage, handleForwardMessages,
     typingUsers, setTyping, mutedRooms, toggleMuteRoom,
     setRoomToDelete, roomToDelete, handleDeleteRoom, handleAcceptGroup, handleDeclineGroup,
-    roomWallpapers, handleUpdateRoomWallpaper
+    roomWallpapers, handleUpdateRoomWallpaper, retryMessage
   } = useChat();
   const { user } = useAuth();
 
@@ -160,7 +155,6 @@ export default function Chat() {
   const currentMessages = (allMessages || [])
     .filter(m => m.roomId === activeRoomId)
     .filter(m => !msgSearchQuery || (m.text || '').toLowerCase().includes(msgSearchQuery.toLowerCase()));
-  const lastMineId = [...currentMessages].reverse().find(m => m.senderId === user?.id)?.id;
 
   const shouldShowDateSeparator = (index) => {
     if (index === 0) return true;
@@ -470,54 +464,39 @@ export default function Chat() {
                             else if (isTouch() && !msg.isDeleted) setActiveMessageMenuId(menuOpen ? null : msg.id);
                           }}
                           onContextMenu={(e) => { if (!msg.isDeleted && !isForwardMode) { e.preventDefault(); setActiveMessageMenuId(msg.id); } }}
-                          className={`group relative flex gap-3 md:gap-4 pl-3 md:pl-4 pr-3 md:pr-12 ${firstOfGroup ? 'mt-3 pt-1 pb-0.5' : 'py-0.5'} ${selected ? 'bg-brand-soft/60' : menuOpen ? 'bg-hover/60' : 'hover:bg-hover/40'} ${isForwardMode ? 'cursor-pointer' : ''}`}
+                          className={`flex items-end gap-2 px-3 md:px-[6%] ${firstOfGroup ? 'mt-2.5' : 'mt-0.5'} ${isMine ? 'justify-end' : 'justify-start'} ${selected ? 'bg-brand-soft/60' : ''} ${isForwardMode ? 'cursor-pointer' : ''}`}
                         >
                           {isForwardMode && (
-                            <span className={`shrink-0 self-center ${selected ? 'text-brand' : 'text-ink-3'}`}>
+                            <span className={`shrink-0 self-center mr-auto ${selected ? 'text-brand' : 'text-ink-3'}`}>
                               {selected ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                             </span>
                           )}
 
-                          {/* Coluna do avatar / hora */}
-                          <div className="w-10 shrink-0 flex justify-center">
-                            {firstOfGroup ? (
-                              <Avatar src={memberAvatar(msg)} name={name} size={40} className={msg.replyToId ? 'mt-5' : 'mt-0.5'} />
-                            ) : (
-                              <span className="text-[10px] text-ink-3 leading-[22px] opacity-0 group-hover:opacity-100 select-none">{formatTime(msg.timestamp)}</span>
-                            )}
-                          </div>
+                          {/* Avatar só para mensagens de outras pessoas em grupos */}
+                          {isGroup && !isMine && (
+                            <div className="w-8 shrink-0 self-start">
+                              {firstOfGroup && <Avatar src={memberAvatar(msg)} name={name} size={32} />}
+                            </div>
+                          )}
 
-                          <div className="flex-1 min-w-0">
-                            {repliedTo !== null && msg.replyToId && (
-                              <button onClick={(e) => { e.stopPropagation(); jumpToMessage(msg.replyToId); }} className="flex items-center gap-1.5 text-xs text-ink-3 hover:text-ink-2 mb-0.5 max-w-full">
-                                <CornerUpRight className="w-3.5 h-3.5 shrink-0 -scale-x-100" />
-                                {repliedTo ? (
-                                  <>
-                                    <Avatar src={users.find(u => u.id === repliedTo.senderId)?.avatarUrl} name={repliedTo.senderName} size={16} />
-                                    <span className="font-semibold text-ink-2 shrink-0">{repliedTo.senderId === user.id ? 'Você' : repliedTo.senderName}</span>
-                                    <span className="truncate">{repliedTo.text || '📎 Arquivo'}</span>
-                                  </>
-                                ) : <span className="italic">Mensagem original não encontrada</span>}
-                              </button>
-                            )}
-
-                            {firstOfGroup && (
-                              <p className="flex items-baseline gap-2 leading-[22px]">
-                                <span className="font-semibold text-ink text-[15px]" style={isGroup && !isMine ? { color: colorFor(name) } : undefined}>{isMine ? (users.find(u => u.id === user.id)?.name || name) : name}</span>
-                                <span className="text-xs text-ink-3">{longStamp(msg.timestamp)}</span>
-                              </p>
+                          <div className={`group relative max-w-[85%] md:max-w-[65%] min-w-[96px] px-2.5 pt-1.5 pb-1 rounded-lg shadow-bubble text-chat-ink ${isMine ? 'bg-chat-out' : 'bg-chat-in'} ${firstOfGroup ? (isMine ? 'rounded-tr-none bubble-tail-out' : 'rounded-tl-none bubble-tail-in') : ''} ${menuOpen ? 'ring-2 ring-brand/40' : ''}`}>
+                            {isGroup && !isMine && firstOfGroup && (
+                              <p className="text-[13px] font-semibold leading-5 truncate" style={{ color: colorFor(name) }}>{name}</p>
                             )}
 
                             {msg.isForwarded && (
-                              <p className="flex items-center gap-1 text-xs italic text-ink-3"><Forward size={12} /> Encaminhada</p>
+                              <p className="flex items-center gap-1 text-xs italic text-chat-meta"><Forward size={12} /> Encaminhada</p>
                             )}
 
-                            {msg.text && (
-                              <p className={`whitespace-pre-wrap break-words text-[15px] leading-[22px] ${msg.isDeleted ? 'italic text-ink-3 flex items-center gap-1.5' : 'text-ink/90'}`}>
-                                {msg.isDeleted && <Ban className="w-3.5 h-3.5" />}
-                                {msg.isDeleted ? 'Mensagem apagada' : msg.text}
-                                {msg.isEdited && !msg.isDeleted && <span className="text-[11px] text-ink-3 ml-1">(editada)</span>}
-                              </p>
+                            {repliedTo !== null && msg.replyToId && (
+                              <button onClick={(e) => { e.stopPropagation(); jumpToMessage(msg.replyToId); }} className="block w-full text-left mt-0.5 mb-1 rounded-md bg-black/5 dark:bg-white/5 border-l-4 border-brand px-2 py-1 text-xs hover:bg-black/10 dark:hover:bg-white/10">
+                                {repliedTo ? (
+                                  <>
+                                    <span className="block font-semibold text-brand truncate">{repliedTo.senderId === user.id ? 'Você' : repliedTo.senderName}</span>
+                                    <span className="block truncate text-chat-meta">{repliedTo.isDeleted ? 'Mensagem apagada' : (repliedTo.text || '📎 Arquivo')}</span>
+                                  </>
+                                ) : <span className="italic text-chat-meta">Mensagem original não encontrada</span>}
+                              </button>
                             )}
 
                             {msg.attachment && (
@@ -525,15 +504,15 @@ export default function Chat() {
                                 <img
                                   src={msg.attachment.data}
                                   alt={msg.attachment.name}
-                                  className="mt-1 max-h-[320px] max-w-full md:max-w-[420px] rounded-lg cursor-pointer object-cover"
+                                  className="mt-0.5 max-h-[320px] w-full md:max-w-[360px] rounded-md cursor-pointer object-cover"
                                   onClick={(e) => { e.stopPropagation(); setPreviewDocument(msg.attachment); }}
                                 />
                               ) : (
-                                <div onClick={(e) => { e.stopPropagation(); setPreviewDocument(msg.attachment); }} className="mt-1 flex items-center gap-3 p-3 rounded-lg bg-subtle border border-line cursor-pointer w-full max-w-[420px] hover:border-ink-3/50">
+                                <div onClick={(e) => { e.stopPropagation(); setPreviewDocument(msg.attachment); }} className="mt-0.5 flex items-center gap-3 p-2.5 rounded-md bg-black/5 dark:bg-white/5 cursor-pointer w-full max-w-[360px] hover:bg-black/10 dark:hover:bg-white/10">
                                   {(() => { const { Icon, color } = getFileIcon(msg.attachment.name); return <span className={`w-9 h-11 rounded flex items-center justify-center shrink-0 ${color}`}><Icon size={18} /></span>; })()}
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-brand truncate hover:underline">{msg.attachment.name}</p>
-                                    <p className="text-xs text-ink-3">{(msg.attachment.size / 1024 / 1024).toFixed(2)} MB</p>
+                                    <p className="text-sm font-medium truncate">{msg.attachment.name}</p>
+                                    <p className="text-xs text-chat-meta">{(msg.attachment.size / 1024 / 1024).toFixed(2)} MB</p>
                                   </div>
                                   <a href={msg.attachment.data} download={msg.attachment.name} onClick={(e) => e.stopPropagation()} className="icon-btn" title="Baixar">
                                     <Download className="w-4 h-4" />
@@ -542,29 +521,50 @@ export default function Chat() {
                               )
                             )}
 
-                            {isMine && !isGroup && msg.id === lastMineId && !msg.isDeleted && (
-                              <p className={`flex items-center gap-1 text-[11px] mt-0.5 ${isRead ? 'text-brand' : 'text-ink-3'}`}>
-                                <ReadIndicator isRead={isRead} size={14} className={isRead ? '!text-brand' : '!text-ink-3'} />
-                                {isRead ? 'Lida' : 'Enviada'}
+                            {msg.text && (
+                              <p className={`whitespace-pre-wrap break-words text-[15px] leading-[21px] ${msg.isDeleted ? 'italic text-chat-meta flex items-center gap-1.5' : ''}`}>
+                                {msg.isDeleted && <Ban className="w-3.5 h-3.5" />}
+                                {msg.isDeleted ? 'Mensagem apagada' : msg.text}
                               </p>
                             )}
-                          </div>
 
-                          {/* Barra de ações (hover no desktop, toque no celular) */}
-                          {!msg.isDeleted && !isForwardMode && (
-                            <div
-                              ref={menuOpen ? messageMenuRef : null}
-                              onClick={(e) => e.stopPropagation()}
-                              className={`absolute right-3 md:right-4 -top-4 z-20 flex items-center bg-surface border border-line rounded-md shadow-card overflow-hidden ${menuOpen ? 'flex' : 'hidden md:group-hover:flex'}`}
-                            >
-                              <button onClick={() => startReply(msg)} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Responder"><CornerUpLeft className="w-4 h-4" /></button>
-                              {canEdit && <button onClick={() => startEdit(msg)} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Editar"><Pencil className="w-4 h-4" /></button>}
-                              {msg.text && <button onClick={() => { navigator.clipboard.writeText(msg.text); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Copiar"><Copy className="w-4 h-4" /></button>}
-                              <button onClick={() => { setIsForwardMode(true); setSelectedForwardMessages([msg.id]); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Encaminhar"><Forward className="w-4 h-4" /></button>
-                              {isMine && <button onClick={() => { handleDeleteMessage(msg.id); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-danger hover:bg-danger-soft" title="Apagar"><Trash2 className="w-4 h-4" /></button>}
+                            {/* Hora, editada e confirmação de envio/leitura dentro do balão */}
+                            <div className="flex items-center justify-end gap-1 -mt-0.5 text-[11px] leading-4 text-chat-meta select-none">
+                              {msg.isEdited && !msg.isDeleted && <span>editada</span>}
+                              <span>{formatTime(msg.timestamp)}</span>
+                              {isMine && !msg.isDeleted && (
+                                msg.status === 'sending' ? <Clock className="w-3 h-3" aria-label="Enviando" />
+                                : msg.status === 'failed' ? <AlertCircle className="w-3.5 h-3.5 text-danger" aria-label="Não enviada" />
+                                : <ReadIndicator isRead={!isGroup && isRead} size={16} />
+                              )}
                             </div>
-                          )}
+
+                            {/* Barra de ações (hover no desktop, toque no celular) */}
+                            {!msg.isDeleted && !isForwardMode && (
+                              <div
+                                ref={menuOpen ? messageMenuRef : null}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`absolute -top-4 z-20 items-center bg-surface border border-line rounded-md shadow-card overflow-hidden ${isMine ? 'right-1' : 'left-1'} ${menuOpen ? 'flex' : 'hidden md:group-hover:flex'}`}
+                              >
+                                <button onClick={() => startReply(msg)} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Responder"><CornerUpLeft className="w-4 h-4" /></button>
+                                {canEdit && <button onClick={() => startEdit(msg)} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Editar"><Pencil className="w-4 h-4" /></button>}
+                                {msg.text && <button onClick={() => { navigator.clipboard.writeText(msg.text); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Copiar"><Copy className="w-4 h-4" /></button>}
+                                <button onClick={() => { setIsForwardMode(true); setSelectedForwardMessages([msg.id]); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-ink-2 hover:bg-hover hover:text-ink" title="Encaminhar"><Forward className="w-4 h-4" /></button>
+                                {isMine && <button onClick={() => { handleDeleteMessage(msg.id); setActiveMessageMenuId(null); }} className="w-8 h-8 flex items-center justify-center text-danger hover:bg-danger-soft" title="Apagar"><Trash2 className="w-4 h-4" /></button>}
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        {isMine && msg.status === 'failed' && (
+                          <div className="flex justify-end px-3 md:px-[6%]">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); retryMessage(msg.id); }}
+                              className="flex items-center gap-1 text-[11px] mt-0.5 text-danger hover:underline"
+                            >
+                              <AlertCircle className="w-3 h-3" /> Não enviada · Tentar novamente
+                            </button>
+                          </div>
+                        )}
                       </React.Fragment>
                     );
                   })}
@@ -702,56 +702,63 @@ export default function Chat() {
 
             {/* Painel de perfil / membros */}
             {showChatInfo && (
-              <aside className="fixed inset-0 z-[60] md:static md:z-auto md:w-[320px] shrink-0 bg-subtle md:border-l border-line flex flex-col animate-slide-left md:animate-fade-in overflow-hidden">
-                <div className="h-24 shrink-0 relative" style={{ backgroundColor: colorFor(currentRoomInfo.name) }}>
-                  <button onClick={() => setShowChatInfo(false)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/30 text-white flex items-center justify-center hover:bg-black/50" aria-label="Fechar">
-                    <X className="w-4 h-4" />
+              <aside className="fixed inset-0 z-[60] md:static md:z-auto md:w-[340px] shrink-0 bg-subtle md:border-l border-line flex flex-col animate-slide-left md:animate-fade-in overflow-hidden">
+                <div className="h-14 shrink-0 flex items-center gap-3 px-3 bg-surface border-b border-line">
+                  <button onClick={() => setShowChatInfo(false)} className="icon-btn w-9 h-9" aria-label="Fechar">
+                    <X className="w-5 h-5" />
                   </button>
+                  <h3 className="font-semibold text-ink">{isGroup ? 'Dados do grupo' : 'Dados do contato'}</h3>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6">
-                  <div className="relative -mt-11 inline-block">
-                    <div className="rounded-full ring-[6px] ring-subtle">
-                      <Avatar src={currentRoomInfo.avatarUrl} name={currentRoomInfo.name} size={80} status={roomPresence} square={isGroup} />
+                  {/* Cabeçalho: foto grande, nome e status */}
+                  <div className="flex flex-col items-center text-center pt-6 pb-5">
+                    <div className="relative">
+                      <Avatar src={currentRoomInfo.avatarUrl} name={currentRoomInfo.name} size={112} status={roomPresence} square={isGroup} />
+                      {isGroup && currentRoomInfo.createdBy === user?.id && (
+                        <button onClick={() => setShowAvatarPicker(!showAvatarPicker)} className="absolute bottom-1 right-1 w-8 h-8 rounded-full bg-brand text-white flex items-center justify-center ring-4 ring-subtle" title="Alterar imagem do grupo">
+                          <Camera className="w-4 h-4" />
+                        </button>
+                      )}
+                      {showAvatarPicker && (
+                        <div className="menu absolute top-full left-1/2 -translate-x-1/2 mt-2 w-48 z-[70] text-left">
+                          <input type="file" ref={groupSidebarFileInputRef} onChange={handleGroupSidebarFileChange} className="hidden" accept="image/*" />
+                          <button onClick={() => groupSidebarFileInputRef.current.click()} className="menu-item"><ImageIcon className="w-4 h-4 text-ink-2" /> Carregar foto</button>
+                          {currentRoomInfo.avatarUrl && (
+                            <button onClick={() => { handleUpdateGroup(currentRoomInfo.id, { avatarUrl: null }); setShowAvatarPicker(false); }} className="menu-item text-danger">
+                              <Trash2 className="w-4 h-4" /> Remover foto
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {isGroup && currentRoomInfo.createdBy === user?.id && (
-                      <button onClick={() => setShowAvatarPicker(!showAvatarPicker)} className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center ring-4 ring-subtle" title="Alterar imagem do grupo">
-                        <Camera className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {showAvatarPicker && (
-                      <div className="menu absolute top-full left-0 mt-2 w-48 z-[70]">
-                        <input type="file" ref={groupSidebarFileInputRef} onChange={handleGroupSidebarFileChange} className="hidden" accept="image/*" />
-                        <button onClick={() => groupSidebarFileInputRef.current.click()} className="menu-item"><ImageIcon className="w-4 h-4 text-ink-2" /> Carregar foto</button>
-                        {currentRoomInfo.avatarUrl && (
-                          <button onClick={() => { handleUpdateGroup(currentRoomInfo.id, { avatarUrl: null }); setShowAvatarPicker(false); }} className="menu-item text-danger">
-                            <Trash2 className="w-4 h-4" /> Remover foto
-                          </button>
-                        )}
-                      </div>
+                    <h4 className="mt-4 text-xl font-bold text-ink break-words max-w-full">{currentRoomInfo.name}</h4>
+                    {isGroup ? (
+                      <p className="text-sm text-ink-2">Grupo · {currentRoomInfo.members?.length || 0} membros</p>
+                    ) : (
+                      <>
+                        {recipient?.username && <p className="text-sm text-ink-2">@{recipient.username}</p>}
+                        <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${PRESENCE[roomPresence]?.color}`} /> {PRESENCE[roomPresence]?.label}
+                        </p>
+                      </>
                     )}
                   </div>
 
-                  <div className="mt-3 rounded-lg bg-surface p-4">
-                    <h4 className="text-xl font-bold text-ink">{currentRoomInfo.name}</h4>
-                    <p className="text-sm text-ink-2">{isGroup ? `Grupo · ${currentRoomInfo.members?.length || 0} membros` : (recipient?.username ? `@${recipient.username}` : PRESENCE[roomPresence]?.label)}</p>
-
-                    {!isGroup && recipient && (
-                      <div className="mt-4 pt-4 border-t border-line space-y-3 text-sm">
-                        {recipient.bio && (
-                          <div><p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-0.5">Sobre</p><p className="text-ink">{recipient.bio}</p></div>
-                        )}
-                        <div className="flex items-center gap-2 text-ink-2"><Briefcase className="w-4 h-4 text-ink-3" /> {recipient.role || 'Membro da equipe'}</div>
-                        <div className="flex items-center gap-2 text-ink-2 min-w-0"><Mail className="w-4 h-4 text-ink-3 shrink-0" /> <span className="truncate">{recipient.email || '—'}</span></div>
-                        <div className="flex items-center gap-2 text-ink-2"><span className={`w-2.5 h-2.5 rounded-full ${PRESENCE[roomPresence].color}`} /> {PRESENCE[roomPresence].label}</div>
-                      </div>
-                    )}
-                    {isGroup && currentRoomInfo.description && (
-                      <div className="mt-4 pt-4 border-t border-line text-sm">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-0.5">Descrição</p>
-                        <p className="text-ink">{currentRoomInfo.description}</p>
-                      </div>
-                    )}
-                  </div>
+                  {!isGroup && recipient && (
+                    <div className="rounded-lg bg-surface p-4 space-y-3 text-sm">
+                      {recipient.bio && (
+                        <div><p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-0.5">Sobre</p><p className="text-ink">{recipient.bio}</p></div>
+                      )}
+                      <div className="flex items-center gap-3 text-ink-2"><Briefcase className="w-4 h-4 text-ink-3 shrink-0" /> {recipient.role || 'Membro da equipe'}</div>
+                      <div className="flex items-center gap-3 text-ink-2 min-w-0"><Mail className="w-4 h-4 text-ink-3 shrink-0" /> <span className="truncate">{recipient.email || '—'}</span></div>
+                    </div>
+                  )}
+                  {isGroup && currentRoomInfo.description && (
+                    <div className="rounded-lg bg-surface p-4 text-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-3 mb-0.5">Descrição</p>
+                      <p className="text-ink">{currentRoomInfo.description}</p>
+                    </div>
+                  )}
 
                   {currentRoomInfo.id !== user.id && (
                     <div className="grid grid-cols-2 gap-2 mt-3">

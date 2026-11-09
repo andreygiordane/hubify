@@ -68,35 +68,80 @@ const io = new Server(server, {
   transports: ['websocket', 'polling'],
   // Detecta mais rápido aparelhos que sumiram sem avisar (navegador do celular fechado)
   pingInterval: 10000,
-  pingTimeout: 10000
+  pingTimeout: 10000,
+  // Anexos vão em base64 dentro da mensagem (mesmo limite do nginx/backend)
+  maxHttpBufferSize: 12e6
 });
 
 io.engine.on("connection_error", (err) => {
   console.log(`[!] Connection Error:`, err.req ? `Request to ${err.req.url}` : 'No request', `| Code: ${err.code} | Message: ${err.message}`);
 });
 
+const backend = async (method, path, body) => {
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`Backend ${method} ${path} respondeu ${res.status}`);
+  return res.json();
+};
+
 // Presença no backend (não bloqueia a entrada na sala)
 const setOnline = (uid, isOnline) => {
-  fetch(`${BACKEND_URL}/auth/users/${uid}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ isOnline })
-  }).catch(e => console.error(`[STATUS] Error updating presence for ${uid}:`, e.message));
+  backend('PUT', `/auth/users/${uid}`, { isOnline })
+    .catch(e => console.error(`[STATUS] Error updating presence for ${uid}:`, e.message));
 };
 
 // Presença: sockets abertos por usuário. Só fica offline quando o último aparelho desconecta.
 const userSockets = new Map(); // uid -> Set(socketId)
 const offlineTimers = new Map(); // uid -> timeout (tolerância para reconexões rápidas)
 
+const userRoom = (uid) => `user:${uid}`;
+const chatRoom = (roomId) => `chat:${roomId}`;
+
+// Quem deve receber eventos de uma conversa: os dois lados de uma DM, ou quem assina o grupo
+const recipientsOf = (roomId) => {
+  if (roomId.startsWith('dm_')) {
+    return roomId.slice(3).split('_').filter(Boolean).map(userRoom);
+  }
+  return [chatRoom(roomId)];
+};
+
+// Pode falar nesta conversa? (DM só entre os dois participantes)
+const canUseRoom = (socket, roomId) => {
+  if (!socket.userId || typeof roomId !== 'string' || !roomId) return false;
+  if (roomId.startsWith('dm_')) return roomId.slice(3).split('_').includes(socket.userId);
+  return true;
+};
+
+// Convites de chamada em andamento: callId -> convite (entregue também a quem conectar depois)
+const pendingCalls = new Map();
+const CALL_RING_MS = 50000;
+
+const closeCall = (callId) => {
+  const call = pendingCalls.get(callId);
+  if (!call) return null;
+  clearTimeout(call.timer);
+  pendingCalls.delete(callId);
+  return call;
+};
+
 const registerPresence = (socket, uid) => {
   if (!uid || socket.userId === uid) return;
   socket.userId = uid;
+  socket.join(userRoom(uid));
   if (!userSockets.has(uid)) userSockets.set(uid, new Set());
   const sockets = userSockets.get(uid);
   sockets.add(socket.id);
   clearTimeout(offlineTimers.get(uid));
   offlineTimers.delete(uid);
   if (sockets.size === 1) setOnline(uid, true);
+
+  // Aparelho que acabou de conectar ainda deve tocar se houver uma chamada para ele
+  for (const call of pendingCalls.values()) {
+    if (call.to === uid) socket.emit('call-incoming', call.invite);
+  }
 };
 
 const unregisterPresence = (socket) => {
@@ -108,7 +153,15 @@ const unregisterPresence = (socket) => {
   userSockets.delete(uid);
   offlineTimers.set(uid, setTimeout(() => {
     offlineTimers.delete(uid);
-    if (!userSockets.has(uid)) setOnline(uid, false);
+    if (userSockets.has(uid)) return;
+    setOnline(uid, false);
+    // Quem ligou caiu de vez: para de tocar no outro lado
+    for (const [callId, call] of pendingCalls) {
+      if (call.from === uid) {
+        closeCall(callId);
+        io.to(userRoom(call.to)).emit('call-cancelled', { callId });
+      }
+    }
   }, 5000));
 };
 
@@ -122,10 +175,135 @@ const cleanupRoom = (roomId) => {
   }
 };
 
+const ack = (fn, payload) => { if (typeof fn === 'function') fn(payload); };
+
 io.on('connection', (socket) => {
   console.log(`[+] User connected: ${socket.id} | Active connections: ${io.engine.clientsCount}`);
 
-  socket.on('join-room', ({ roomId, uid, name, avatarUrl }) => {
+  // Relógio do servidor: o cliente calcula a diferença para o seu (ordem e "lida" corretas)
+  socket.on('server-time', (fn) => ack(fn, Date.now()));
+
+  // Cada aparelho se identifica ao conectar (não depende de abrir uma conversa)
+  socket.on('presence', ({ uid } = {}) => registerPresence(socket, uid));
+
+  // Grupos que este aparelho acompanha (mensagens, digitando, leitura)
+  socket.on('subscribe-rooms', ({ rooms: roomIds } = {}) => {
+    if (!Array.isArray(roomIds)) return;
+    const wanted = new Set(roomIds.filter(id => typeof id === 'string' && !id.startsWith('dm_')).map(chatRoom));
+    for (const r of socket.rooms) {
+      if (r.startsWith('chat:') && !wanted.has(r)) socket.leave(r);
+    }
+    wanted.forEach(r => socket.join(r));
+  });
+
+  // ---------- Mensagens ----------
+  // Grava no backend e só então entrega e confirma ao remetente (✓). Reenvio com o mesmo id é seguro.
+  socket.on('send-message', async (message, fn) => {
+    try {
+      if (!message?.id || !canUseRoom(socket, message.roomId)) return ack(fn, { ok: false, error: 'invalid' });
+      const { isOptimistic, status, ...clean } = message;
+      const stored = { ...clean, senderId: socket.userId, timestamp: Date.now() };
+      const saved = await backend('POST', '/data/messages', stored);
+      const final = { ...stored, updatedAt: saved.updatedAt };
+      socket.to(recipientsOf(final.roomId)).emit('message-created', final);
+      ack(fn, { ok: true, message: final });
+    } catch (e) {
+      console.error('[MSG] Falha ao salvar mensagem:', e.message);
+      ack(fn, { ok: false, error: 'storage' });
+    }
+  });
+
+  // Edição e exclusão ("Mensagem apagada")
+  socket.on('update-message', async ({ id, roomId, changes } = {}, fn) => {
+    try {
+      if (!id || !changes || !canUseRoom(socket, roomId)) return ack(fn, { ok: false, error: 'invalid' });
+      const saved = await backend('PATCH', `/data/messages/${encodeURIComponent(id)}`, changes);
+      const message = { ...JSON.parse(saved.jsonData), updatedAt: saved.updatedAt };
+      socket.to(recipientsOf(roomId)).emit('message-updated', message);
+      ack(fn, { ok: true, message });
+    } catch (e) {
+      console.error('[MSG] Falha ao atualizar mensagem:', e.message);
+      ack(fn, { ok: false, error: 'storage' });
+    }
+  });
+
+  socket.on('typing', ({ roomId, userName } = {}) => {
+    if (!canUseRoom(socket, roomId)) return;
+    socket.to(recipientsOf(roomId)).emit('user-typing', { roomId, userId: socket.userId, userName });
+  });
+
+  socket.on('stop-typing', ({ roomId } = {}) => {
+    if (!canUseRoom(socket, roomId)) return;
+    socket.to(recipientsOf(roomId)).emit('user-stop-typing', { roomId, userId: socket.userId });
+  });
+
+  // Confirmação de leitura com a hora do servidor (mesma base do timestamp das mensagens)
+  socket.on('messages-read', ({ roomId } = {}, fn) => {
+    if (!canUseRoom(socket, roomId)) return ack(fn, { ok: false });
+    const timestamp = Date.now();
+    socket.to(recipientsOf(roomId)).emit('user-read-messages', { userId: socket.userId, roomId, timestamp });
+    ack(fn, { ok: true, timestamp });
+  });
+
+  socket.on('profile-update', ({ userId, data } = {}) => {
+    if (!userId || userId !== socket.userId) return;
+    socket.broadcast.emit('profile-update', { userId, data });
+  });
+
+  socket.on('conversation-deleted', ({ roomId, deletedBy, deletedAt } = {}) => {
+    // DMs não são apagadas para o outro participante; grupos sim
+    if (!roomId || !roomId.startsWith('group_')) return;
+    socket.to(chatRoom(roomId)).emit('conversation-deleted', { roomId, deletedBy, deletedAt });
+  });
+
+  // ---------- Convites de chamada (entrega imediata, sem passar pelo banco) ----------
+  socket.on('call-invite', (invite, fn) => {
+    if (!socket.userId || !invite?.callId || !invite?.to || !invite?.roomId) return ack(fn, { ok: false });
+    const call = {
+      callId: invite.callId,
+      from: socket.userId,
+      to: invite.to,
+      invite: { ...invite, id: invite.callId, from: socket.userId, status: 'ringing', timestamp: Date.now() }
+    };
+    closeCall(call.callId);
+    call.timer = setTimeout(() => {
+      if (!closeCall(call.callId)) return;
+      io.to(userRoom(call.from)).emit('call-missed', { callId: call.callId });
+      io.to(userRoom(call.to)).emit('call-cancelled', { callId: call.callId });
+    }, CALL_RING_MS);
+    pendingCalls.set(call.callId, call);
+    io.to(userRoom(call.to)).emit('call-incoming', call.invite);
+    console.log(`[CALL] ${call.from} -> ${call.to} (${invite.type}) ${call.callId}`);
+    ack(fn, { ok: true, online: userSockets.has(call.to) });
+  });
+
+  socket.on('call-accept', ({ callId } = {}, fn) => {
+    const call = pendingCalls.get(callId);
+    if (!call || call.to !== socket.userId) return ack(fn, { ok: false });
+    closeCall(callId);
+    ack(fn, { ok: true });
+    io.to(userRoom(call.from)).emit('call-accepted', { callId, roomId: call.invite.roomId });
+    // Outros aparelhos de quem atendeu param de tocar
+    socket.to(userRoom(call.to)).emit('call-cancelled', { callId });
+  });
+
+  socket.on('call-decline', ({ callId, reason } = {}) => {
+    const call = pendingCalls.get(callId);
+    if (!call || call.to !== socket.userId) return;
+    closeCall(callId);
+    io.to(userRoom(call.from)).emit('call-declined', { callId, reason: reason || 'declined' });
+    socket.to(userRoom(call.to)).emit('call-cancelled', { callId });
+  });
+
+  socket.on('call-cancel', ({ callId } = {}) => {
+    const call = pendingCalls.get(callId);
+    if (!call || call.from !== socket.userId) return;
+    closeCall(callId);
+    io.to(userRoom(call.to)).emit('call-cancelled', { callId });
+  });
+
+  // ---------- Sala da chamada (WebRTC) ----------
+  socket.on('join-room', ({ roomId, uid, name, avatarUrl } = {}) => {
     try {
       if (!roomId) return;
       socket.join(roomId);
@@ -146,10 +324,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Cada aparelho se identifica ao conectar (não depende de abrir uma conversa)
-  socket.on('presence', ({ uid }) => registerPresence(socket, uid));
-
-  socket.on('update-user-state', ({ roomId, state }) => {
+  socket.on('update-user-state', ({ roomId, state } = {}) => {
     try {
       if (rooms[roomId] && rooms[roomId].has(socket.id)) {
         const current = rooms[roomId].get(socket.id);
@@ -161,29 +336,24 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send-chat', ({ roomId, message }) => {
-    io.to(roomId).emit('receive-chat', message);
-  });
-
-  socket.on('message-created', (message) => {
-    if (!message || !message.roomId) return;
-    socket.broadcast.emit('message-created', message);
+  socket.on('send-chat', ({ roomId, message } = {}) => {
+    if (rooms[roomId]?.has(socket.id)) io.to(roomId).emit('receive-chat', message);
   });
 
   // Sinalização WebRTC (classe Peer)
   socket.on("sending-signal", payload => {
     const sig = payload.signal || {};
-    console.log(`[SIGNAL] ${payload.callerID} -> ${payload.userToSignal}: ${sig.type || 'candidate'}`);
-    io.to(payload.userToSignal).emit('user-joined', { signal: payload.signal, callerID: payload.callerID });
+    if (sig.type) console.log(`[SIGNAL] ${payload.callerID} -> ${payload.userToSignal}: ${sig.type}`);
+    io.to(payload.userToSignal).emit('user-joined', { signal: payload.signal, callerID: socket.id });
   });
 
   socket.on("returning-signal", payload => {
     const sig = payload.signal || {};
-    console.log(`[SIGNAL] ${socket.id} -> ${payload.callerID}: ${sig.type || 'candidate'}`);
+    if (sig.type) console.log(`[SIGNAL] ${socket.id} -> ${payload.callerID}: ${sig.type}`);
     io.to(payload.callerID).emit('receiving-returned-signal', { signal: payload.signal, id: socket.id });
   });
 
-  socket.on('leave-room', ({ roomId }) => {
+  socket.on('leave-room', ({ roomId } = {}) => {
     socket.leave(roomId);
     if (rooms[roomId] && rooms[roomId].delete(socket.id)) {
       io.to(roomId).emit('room-participants', Array.from(rooms[roomId].values()));
@@ -192,46 +362,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('end-call', ({ roomId }) => {
-    io.to(roomId).emit('call-ended');
-  });
-
-  socket.on('typing', ({ roomId, userId, userName }) => {
-    socket.to(roomId).emit('user-typing', { userId, userName });
-  });
-
-  socket.on('stop-typing', ({ roomId, userId }) => {
-    socket.to(roomId).emit('user-stop-typing', { userId });
-  });
-
-  socket.on('messages-read', ({ roomId, userId, timestamp }) => {
-    console.log(`[READ] User ${userId} marked room ${roomId} as read at ${new Date(timestamp).toISOString()}`);
-    socket.to(roomId).emit('user-read-messages', { userId, roomId, timestamp });
-  });
-
-  socket.on('profile-update', ({ userId, data }) => {
-    socket.broadcast.emit('profile-update', { userId, data });
-  });
-
-  socket.on('conversation-deleted', ({ roomId, deletedBy, deletedAt }) => {
-    if (!roomId) return;
-    // Only broadcast group deletions to everyone. DMs should not be broadcast from client.
-    if (roomId.startsWith('group_')) {
-      socket.broadcast.emit('conversation-deleted', { roomId, deletedBy, deletedAt });
-    } else {
-      // Ignore DM deletion broadcasts to avoid removing conversation for the other participant.
-      console.log(`[CONV_DELETE] DM deletion for ${roomId} by ${deletedBy} ignored for broadcast`);
-    }
-  });
-
-  socket.on('message-deleted', ({ messageId, roomId, deletedBy, deletedAt }) => {
-    if (!messageId) return;
-    socket.broadcast.emit('message-deleted', { messageId, roomId, deletedBy, deletedAt });
+  socket.on('end-call', ({ roomId } = {}) => {
+    if (rooms[roomId]?.has(socket.id)) io.to(roomId).emit('call-ended');
   });
 
   socket.on('disconnect', () => {
     console.log(`[-] User disconnected: ${socket.id} | Active connections: ${io.engine.clientsCount}`);
-    // Notificar o backend que o usuário ficou offline, mas preservar o status de texto
     unregisterPresence(socket);
 
     for (const roomId in rooms) {

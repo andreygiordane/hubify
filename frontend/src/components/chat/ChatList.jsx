@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, MoreHorizontal, BellOff, Bell, Trash2, Info, Plus, Users as UsersIcon, MessageSquare, ChevronRight, Camera, FileText, LogOut } from 'lucide-react';
+import { Search, X, MoreHorizontal, BellOff, Bell, Trash2, Info, Plus, Users as UsersIcon, MessageSquare, ChevronRight, Camera, FileText, LogOut, Clock, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useChat } from '../../context/ChatContext';
+import { useAuth } from '../../context/AuthContext';
 import Avatar, { presenceOf } from '../ui/Avatar';
 import ReadIndicator from '../common/ReadIndicator';
 import { formatListTime } from '../../utils/format';
@@ -30,7 +31,8 @@ export default function ChatList({
   toggleMuteRoom,
   setRoomToDelete
 }) {
-  const { otherUsersReadTimestamps, typingUsers } = useChat();
+  const { otherUsersReadTimestamps, typingUsers, setShowProfileMenu } = useChat();
+  const { currentUserProfile, userStatus } = useAuth();
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -46,10 +48,39 @@ export default function ChatList({
   const pendingInvites = groupInvites?.filter(i => i.toId === user?.id && i.status === 'pending').length || 0;
 
   return (
-    <div className="w-full bg-subtle flex flex-col h-full overflow-hidden">
-      <div className="h-14 md:h-12 shrink-0 px-3 flex items-center gap-2 border-b border-line md:shadow-[0_1px_0_rgb(0_0_0/0.15)]">
-        <h2 className="md:hidden text-lg font-bold text-ink mr-auto">Conversas</h2>
-        <div className="relative flex-1 hidden md:block">
+    <div className="relative w-full bg-surface md:bg-subtle flex flex-col h-full overflow-hidden">
+      {/* Cabeçalho do celular: sua foto (abre o perfil), título e nova conversa */}
+      <div className="md:hidden shrink-0 px-4 pt-3 pb-2 bg-surface">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowProfileMenu(true)} className="shrink-0 rounded-full active:opacity-80" aria-label="Seu perfil e status">
+            <Avatar src={currentUserProfile?.avatarUrl} name={currentUserProfile?.name} size={36} status={userStatus} />
+          </button>
+          <h2 className="flex-1 text-2xl font-bold tracking-tight text-ink">Conversas</h2>
+          <button onClick={() => setShowAddMenu(!showAddMenu)} className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center shadow-card active:scale-95 transition-transform" aria-label="Nova conversa ou grupo">
+            <Plus className={`w-5 h-5 transition-transform ${showAddMenu ? 'rotate-45' : ''}`} />
+          </button>
+        </div>
+        <div className="relative mt-3">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Pesquisar conversas" className="w-full h-10 rounded-full bg-hover pl-10 pr-9 text-[15px] text-ink placeholder:text-ink-3 outline-none focus:ring-2 focus:ring-brand/40" />
+          {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-3" aria-label="Limpar"><X className="w-4 h-4" /></button>}
+        </div>
+        <div className="flex gap-2 mt-3 overflow-x-auto">
+          {FILTERS.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`h-8 px-3.5 rounded-full text-[13px] font-medium shrink-0 transition-colors ${filter === f.id ? 'bg-brand text-white' : 'bg-hover text-ink-2'}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cabeçalho do desktop */}
+      <div className="hidden md:flex h-12 shrink-0 px-3 items-center gap-2 border-b border-line md:shadow-[0_1px_0_rgb(0_0_0/0.15)]">
+        <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
           <input
             value={searchQuery}
@@ -59,34 +90,26 @@ export default function ChatList({
           />
           {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-3 hover:text-ink"><X className="w-3.5 h-3.5" /></button>}
         </div>
-        <div className="relative">
-          <button onClick={() => setShowAddMenu(!showAddMenu)} className={`icon-btn ${showAddMenu ? 'bg-hover text-ink' : ''}`} title="Nova conversa ou grupo">
-            <Plus className="w-5 h-5" />
-          </button>
-          {showAddMenu && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
-              <div className="menu absolute right-0 top-full mt-1 w-52 z-50">
-                <button onClick={() => { setShowDMModal(true); setShowAddMenu(false); }} className="menu-item">
-                  <MessageSquare className="w-4 h-4 text-ink-2" /> Nova conversa
-                </button>
-                <button onClick={() => { setShowGroupModal(true); setShowAddMenu(false); }} className="menu-item">
-                  <UsersIcon className="w-4 h-4 text-ink-2" /> Novo grupo
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <button onClick={() => setShowAddMenu(!showAddMenu)} className={`icon-btn ${showAddMenu ? 'bg-hover text-ink' : ''}`} title="Nova conversa ou grupo">
+          <Plus className="w-5 h-5" />
+        </button>
       </div>
 
-      <div className="md:hidden px-3 pt-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-3" />
-          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Pesquisar conversas" className="w-full h-10 rounded-lg bg-app pl-9 pr-3 text-[15px] text-ink placeholder:text-ink-3 outline-none" />
-        </div>
-      </div>
+      {showAddMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowAddMenu(false)} />
+          <div className="menu absolute right-3 top-14 md:top-11 w-52 z-50">
+            <button onClick={() => { setShowDMModal(true); setShowAddMenu(false); }} className="menu-item">
+              <MessageSquare className="w-4 h-4 text-ink-2" /> Nova conversa
+            </button>
+            <button onClick={() => { setShowGroupModal(true); setShowAddMenu(false); }} className="menu-item">
+              <UsersIcon className="w-4 h-4 text-ink-2" /> Novo grupo
+            </button>
+          </div>
+        </>
+      )}
 
-      <div className="flex gap-1 px-3 pt-3 pb-1">
+      <div className="hidden md:flex gap-1 px-3 pt-3 pb-1">
         {FILTERS.map(f => (
           <button
             key={f.id}
@@ -99,7 +122,7 @@ export default function ChatList({
       </div>
 
       {pendingInvites > 0 && (
-        <button onClick={onViewInvitations} className="mx-2 mt-1 flex items-center gap-3 px-3 py-2 rounded-md bg-brand-soft text-brand-ink hover:brightness-110 transition">
+        <button onClick={onViewInvitations} className="mx-3 md:mx-2 mt-1 flex items-center gap-3 px-3 py-2 rounded-md bg-brand-soft text-brand-ink hover:brightness-110 transition">
           <UsersIcon className="w-4 h-4" />
           <span className="flex-1 text-left text-sm font-medium">
             {pendingInvites} convite{pendingInvites > 1 ? 's' : ''} para grupo
@@ -108,9 +131,9 @@ export default function ChatList({
         </button>
       )}
 
-      <p className="px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Mensagens diretas e grupos</p>
+      <p className="hidden md:block px-4 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Mensagens diretas e grupos</p>
 
-      <div className="flex-1 overflow-y-auto pb-24 md:pb-2 px-2 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto pb-24 md:pb-2 px-1.5 md:px-2 pt-1 md:pt-0 custom-scrollbar">
         {filteredRooms.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
             <MessageSquare className="w-9 h-9 text-ink-3 mb-3" strokeWidth={1.5} />
@@ -211,9 +234,9 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
   const highlight = isActive || unreadCount > 0;
 
   return (
-    <div className="relative group my-0.5">
+    <div className="relative group md:my-0.5">
       {/* Ações ao arrastar para o lado (celular) */}
-      <div className="absolute inset-0 md:hidden flex justify-end rounded-md overflow-hidden">
+      <div className="absolute inset-0 md:hidden flex justify-end rounded-xl overflow-hidden">
         <button onClick={(e) => { e.stopPropagation(); onOpenMenu(e.currentTarget.getBoundingClientRect()); }} className="w-[70px] bg-ink-3 flex items-center justify-center text-white">
           <MoreHorizontal size={22} />
         </button>
@@ -229,23 +252,25 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
         dragDirectionLock
         dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
         onClick={onOpen}
-        className={`relative z-10 flex items-center gap-3 px-2 py-2 md:py-1.5 rounded-md cursor-pointer transition-colors ${isActive ? 'bg-hover' : 'bg-subtle hover:bg-hover/60'}`}
+        className={`relative z-10 flex items-center gap-3 px-2.5 md:px-2 py-2.5 md:py-1.5 rounded-xl md:rounded-md cursor-pointer transition-colors ${isActive ? 'bg-hover' : 'bg-surface md:bg-subtle active:bg-hover md:hover:bg-hover/60'}`}
         style={{ touchAction: 'pan-y' }}
       >
-        <Avatar src={room.avatarUrl} name={room.name} size={isMobile ? 48 : 36} status={presence} square={room.isGroup} />
+        <Avatar src={room.avatarUrl} name={room.name} size={isMobile ? 52 : 36} status={presence} square={room.isGroup} />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <h3 className={`truncate text-[15px] md:text-sm ${highlight ? 'text-ink font-semibold' : 'text-ink-2 font-medium'}`}>{room.name}</h3>
-            <span className="text-[11px] shrink-0 text-ink-3">{lastMsg ? formatListTime(lastMsg.timestamp) : ''}</span>
+            <h3 className={`truncate text-base md:text-sm ${highlight ? 'text-ink font-semibold' : 'text-ink md:text-ink-2 font-medium'}`}>{room.name}</h3>
+            <span className={`text-xs md:text-[11px] shrink-0 ${unreadCount > 0 ? 'text-brand font-semibold' : 'text-ink-3'}`}>{lastMsg ? formatListTime(lastMsg.timestamp) : ''}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <p className={`flex-1 min-w-0 flex items-center gap-1 text-[13px] md:text-xs ${unreadCount > 0 ? 'text-ink-2' : 'text-ink-3'}`}>
+            <p className={`flex-1 min-w-0 flex items-center gap-1 mt-0.5 md:mt-0 text-sm md:text-xs ${unreadCount > 0 ? 'text-ink-2' : 'text-ink-3'}`}>
               {typing.length > 0 ? (
                 <span className="text-brand font-medium truncate">digitando...</span>
               ) : (
                 <>
-                  {mine && !room.isGroup && <ReadIndicator isRead={isRead} size={14} className="shrink-0" />}
+                  {mine && lastMsg.status === 'sending' && <Clock className="w-3.5 h-3.5 shrink-0" />}
+                  {mine && lastMsg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 shrink-0 text-danger" />}
+                  {mine && !lastMsg.status && !room.isGroup && <ReadIndicator isRead={isRead} size={14} className="shrink-0" />}
                   {p.icon && <p.icon className="w-3.5 h-3.5 shrink-0" />}
                   <span className="truncate">{senderPrefix}{p.text}</span>
                 </>
@@ -253,7 +278,7 @@ function ChatRoomItem({ room, user, lastMsg, isRead, typing, unreadCount, isActi
             </p>
             {isMuted && <BellOff className="w-3.5 h-3.5 text-ink-3 shrink-0" />}
             {unreadCount > 0 && (
-              <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[11px] font-bold flex items-center justify-center shrink-0">
+              <span className="min-w-[20px] h-5 md:min-w-[18px] md:h-[18px] px-1.5 rounded-full bg-brand text-white text-[11px] font-bold flex items-center justify-center shrink-0">
                 {unreadCount}
               </span>
             )}

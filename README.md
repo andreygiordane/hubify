@@ -377,31 +377,30 @@ Servidor: `http://localhost:8080`
 
 | Evento | Payload | Descrição |
 |---|---|---|
-| `join-room` | `{roomId, uid, name, avatarUrl}` | Entrar em uma sala de chat/chamada |
-| `message-created` | `MessageObject` | Propagar nova mensagem |
-| `message-deleted` | `{messageId, roomId}` | Propagar deleção |
-| `conversation-deleted` | `{roomId}` | Propagar deleção de conversa |
-| `user-typing` | `{userId, userName, roomId}` | Indicador de digitação |
-| `user-stop-typing` | `{userId, roomId}` | Parar indicador de digitação |
-| `messages-read` | `{roomId, userId, timestamp}` | Marcar mensagens como lidas |
+| `presence` | `{uid}` | Identifica o aparelho (entra na sala `user:<uid>`) |
+| `subscribe-rooms` | `{rooms}` | Grupos acompanhados por este aparelho |
+| `server-time` | — (ack: `timestamp`) | Relógio do servidor para ordenar mensagens |
+| `send-message` | `MessageObject` (ack: `{ok, message}`) | Grava no backend e entrega; o ack é o ✓ |
+| `update-message` | `{id, roomId, changes}` (ack) | Edição / exclusão de mensagem |
+| `typing` / `stop-typing` | `{roomId, userName}` | Indicador de digitação |
+| `messages-read` | `{roomId}` (ack: `{timestamp}`) | Marca a conversa como lida (✓✓) |
 | `profile-update` | `{userId, data}` | Atualizar perfil em tempo real |
-| `calling-user` | `{userToCall, signalData, from, name}` | Iniciar chamada WebRTC |
-| `answer-call` | `{signal, to}` | Responder chamada WebRTC |
-| `ice-candidate` | `{candidate, to}` | Trocar candidatos ICE |
+| `call-invite` | `{callId, to, roomId, type, fromName, fromAvatar}` (ack) | Toca no destinatário na hora |
+| `call-accept` / `call-decline` / `call-cancel` | `{callId}` | Resposta ao convite de chamada |
+| `join-room` / `leave-room` | `{roomId, uid, name, avatarUrl}` | Entrar/sair da sala da chamada |
+| `sending-signal` / `returning-signal` | `{signal, ...}` | Sinalização WebRTC |
 
 ### Receber (Server → Client)
 
 | Evento | Payload | Descrição |
 |---|---|---|
-| `all-users` | `[{id, name}]` | Lista de usuários na sala |
-| `user-joined` | `{userId, name}` | Novo usuário entrou |
-| `user-left` | `{userId}` | Usuário saiu |
-| `call-made` | `{signal, from, name}` | Chamada recebida |
-| `call-accepted` | `{signal, from}` | Chamada aceita |
-| `ice-candidate` | `{candidate, from}` | Candidato ICE recebido |
-| `message-created` | `MessageObject` | Nova mensagem broadcast |
+| `message-created` / `message-updated` | `MessageObject` | Só para os participantes da conversa |
+| `user-typing` / `user-stop-typing` | `{roomId, userId, userName}` | Digitação |
 | `user-read-messages` | `{userId, roomId, timestamp}` | Confirmação de leitura |
-| `user-typing` | `{userId, userName}` | Outro usuário digitando |
+| `call-incoming` | convite | Chamada recebida (reenviada a aparelhos que conectam enquanto toca) |
+| `call-accepted` / `call-declined` / `call-missed` / `call-cancelled` | `{callId, ...}` | Andamento do convite |
+| `room-participants` / `user-connected` / `user-disconnected` | — | Participantes da chamada |
+| `user-joined` / `receiving-returned-signal` | `{signal, ...}` | Sinalização WebRTC |
 
 ---
 
@@ -409,8 +408,9 @@ Servidor: `http://localhost:8080`
 
 ### Chat
 
-- **Mensagens em tempo real** via Socket.IO + polling de backup (2s interval)
-- **Atualização otimista** — mensagem aparece imediatamente na UI antes da confirmação do servidor
+- **Mensagens em tempo real** via Socket.IO com confirmação de entrega (🕓 enviando → ✓ enviada → ✓✓ lida)
+- **Fila de envio** — sem conexão, a mensagem fica pendente (inclusive após recarregar) e é reenviada sozinha ao reconectar
+- **Sincronização incremental** (`GET /api/data/messages/sync?since=`) ao abrir, reconectar ou voltar ao app — baixa só o que mudou
 - **Mensagens deletadas** exibem marcador `🚫 Mensagem apagada`
 - **Responder mensagem** (reply thread) com referência visual
 - **Encaminhar mensagem** para múltiplas conversas
